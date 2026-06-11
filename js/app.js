@@ -74,14 +74,22 @@ function guessDomain(name) {
   return first.length >= 3 ? first + ".com" : null;
 }
 
-// Logo sources in order of quality: the site's own high-res
-// apple-touch-icon (180x180 by convention), then Google's favicon service.
-// Google returns a 16x16 generic globe when a site has no icon, which we
-// detect by size (see loadBestLogo) and reject in favor of a letter avatar.
+// icon.horse parses a site's HTML for its declared icon, so it finds logos
+// at non-standard paths that the conventions below miss. It's also
+// CORS-enabled, which lets us read its pixels for color extraction.
+function iconHorseUrl(domain) {
+  return "https://icon.horse/icon/" + encodeURIComponent(domain);
+}
+
+// Logo sources in order of quality/speed: the site's own high-res
+// apple-touch-icon, then Google's favicon service (fast, but returns a
+// 16x16 generic globe when a site has no icon — rejected by size in
+// loadBestLogo), then icon.horse as a thorough but slower last resort.
 function logoCandidates(domain) {
   return [
     "https://" + domain + "/apple-touch-icon.png",
     "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(domain) + "&sz=128",
+    iconHorseUrl(domain),
   ];
 }
 
@@ -255,10 +263,12 @@ function renderCardList() {
     };
     applyColor(card.bg || fallbackColor(card.name));
 
-    // If we haven't already cached a color, try to derive it from the logo
+    // If we haven't already cached a color, derive it from the logo.
+    // icon.horse is CORS-enabled, so its pixels are readable (unlike the
+    // apple-touch-icon / Google favicon sources).
     const domain = card.domain || guessDomain(card.name);
     if (!card.bg && domain) {
-      extractLogoColor(logoCandidates(domain)[0]).then((color) => {
+      extractLogoColor(iconHorseUrl(domain)).then((color) => {
         if (color) {
           applyColor(color);
           persistCardColor(card.id, color);
