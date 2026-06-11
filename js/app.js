@@ -18,7 +18,8 @@ const addBtn = document.getElementById("add-btn");
 const readerEl = document.getElementById("reader");
 const scanResultEl = document.getElementById("scan-result");
 const cardNameInput = document.getElementById("card-name-input");
-const scannedValueEl = document.getElementById("scanned-value");
+const cardCodeInput = document.getElementById("card-code-input");
+const manualBtn = document.getElementById("manual-btn");
 
 let selectedCardId = null;
 
@@ -118,11 +119,12 @@ function renderBarcode(container, code, format) {
 
 function startScan() {
   scanResultEl.hidden = true;
+  manualBtn.hidden = false;
+  readerEl.hidden = false;
   readerEl.innerHTML = "";
   Scanner.start((decodedText, formatName) => {
     Scanner.stop();
-    scannedValueEl.textContent = decodedText;
-    scanResultEl.dataset.code = decodedText;
+    cardCodeInput.value = decodedText;
     scanResultEl.dataset.format = formatName;
     cardNameInput.value = "";
     scanResultEl.hidden = false;
@@ -130,6 +132,17 @@ function startScan() {
   }).catch((err) => {
     alert("Camera error: " + err);
   });
+}
+
+function startManualEntry() {
+  Scanner.stop();
+  readerEl.hidden = true;
+  manualBtn.hidden = true;
+  scanResultEl.dataset.format = "CODE_128";
+  cardNameInput.value = "";
+  cardCodeInput.value = "";
+  scanResultEl.hidden = false;
+  cardNameInput.focus();
 }
 
 function openDetail(id) {
@@ -157,8 +170,14 @@ backBtn.addEventListener("click", () => {
 
 document.getElementById("rescan-btn").addEventListener("click", startScan);
 
+manualBtn.addEventListener("click", startManualEntry);
+
 document.getElementById("save-card-btn").addEventListener("click", () => {
-  const code = scanResultEl.dataset.code;
+  const code = cardCodeInput.value.trim();
+  if (!code) {
+    alert("Card code can't be empty.");
+    return;
+  }
   const format = scanResultEl.dataset.format;
   const name = cardNameInput.value.trim() || "Untitled card";
 

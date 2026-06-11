@@ -8,7 +8,17 @@ const Scanner = (() => {
 
     const config = {
       fps: 10,
-      qrbox: { width: 250, height: 150 },
+      // Wide scan box so long 1D barcodes aren't cropped
+      qrbox: (viewfinderWidth, viewfinderHeight) => {
+        const width = Math.floor(viewfinderWidth * 0.9);
+        const height = Math.floor(Math.min(viewfinderHeight * 0.5, width * 0.5));
+        return { width, height };
+      },
+      videoConstraints: {
+        facingMode: "environment",
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+      },
     };
 
     return html5QrCode.start(

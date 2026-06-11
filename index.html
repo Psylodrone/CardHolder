@@ -33,14 +33,15 @@
       <!-- Scan view: camera scanner -->
       <section id="view-scan" class="view">
         <div id="reader"></div>
+        <button id="manual-btn" class="btn btn-secondary" style="margin-top: 12px;">Enter code manually</button>
         <div id="scan-result" class="scan-result" hidden>
           <div class="field">
             <label for="card-name-input">Card name</label>
             <input id="card-name-input" type="text" placeholder="e.g. Tesco Clubcard" />
           </div>
           <div class="field">
-            <label>Scanned code</label>
-            <p class="code-value" id="scanned-value"></p>
+            <label for="card-code-input">Card code</label>
+            <input id="card-code-input" type="text" placeholder="Card number / code" />
           </div>
           <button id="save-card-btn" class="btn btn-primary">Save card</button>
           <button id="rescan-btn" class="btn btn-secondary">Scan again</button>
