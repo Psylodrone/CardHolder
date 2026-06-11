@@ -1,4 +1,4 @@
-const CACHE_NAME = "cardholder-v10";
+const CACHE_NAME = "cardholder-v11";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const APP_SHELL = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
+  "https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js",
   "https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js",
   "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"
 ];

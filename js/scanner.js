@@ -58,22 +58,62 @@ const Scanner = (() => {
     }
   }
 
-  // Decode a still photo (full camera resolution, much more reliable
-  // than video frames for small barcodes)
+  // Maps native BarcodeDetector format names to our internal names
+  const NATIVE_FORMATS = {
+    ean_13: "EAN_13",
+    ean_8: "EAN_8",
+    upc_a: "UPC_A",
+    upc_e: "UPC_E",
+    code_128: "CODE_128",
+    code_39: "CODE_39",
+    codabar: "CODABAR",
+    itf: "ITF",
+    qr_code: "QR_CODE",
+    data_matrix: "DATA_MATRIX",
+    pdf417: "PDF_417",
+    aztec: "AZTEC",
+  };
+
+  // Decode a still photo at full camera resolution. html5-qrcode's own
+  // scanFile downscales the image to the viewfinder size, destroying
+  // small barcodes — so we use the native detector or ZXing instead.
   async function scanFile(file) {
     await stop();
-    if (!html5QrCode) {
-      html5QrCode = new Html5Qrcode("reader");
-    }
-    if (typeof html5QrCode.scanFileV2 === "function") {
-      const res = await html5QrCode.scanFileV2(file, false);
+
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+
+      // 1. Native platform detector (same engine as native apps)
+      if ("BarcodeDetector" in window) {
+        try {
+          const detector = new BarcodeDetector();
+          const codes = await detector.detect(img);
+          if (codes.length > 0) {
+            return {
+              text: codes[0].rawValue,
+              format: NATIVE_FORMATS[codes[0].format] || "UNKNOWN",
+            };
+          }
+        } catch (e) {
+          console.warn("Native BarcodeDetector failed, trying ZXing", e);
+        }
+      }
+
+      // 2. ZXing at full image resolution with TRY_HARDER
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZXing.BrowserMultiFormatReader(hints);
+      const result = await reader.decodeFromImageElement(img);
       return {
-        text: res.decodedText,
-        format: res.result?.format?.formatName || "UNKNOWN",
+        text: result.getText(),
+        format: ZXing.BarcodeFormat[result.getBarcodeFormat()] || "UNKNOWN",
       };
+    } finally {
+      URL.revokeObjectURL(url);
     }
-    const text = await html5QrCode.scanFile(file, false);
-    return { text, format: "UNKNOWN" };
   }
 
   return { start, stop, scanFile };
