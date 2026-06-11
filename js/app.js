@@ -82,47 +82,63 @@ function iconHorseUrl(domain) {
   return "https://icon.horse/icon/" + encodeURIComponent(domain);
 }
 
-// Logo sources in order of quality/speed: the site's own high-res
-// apple-touch-icon, then Google's favicon service (fast, but returns a
-// 16x16 generic globe when a site has no icon — rejected by size in
-// loadBestLogo), then icon.horse as a thorough but slower last resort.
+// Logo sources, in priority order. Multiple services are listed because
+// any one of them can be blocked/unreachable on a given network (e.g.
+// Google's favicon service doesn't load on some connections while
+// DuckDuckGo does). loadBestLogo tries them all at once and picks the
+// best that actually loads.
 function logoCandidates(domain) {
+  const d = encodeURIComponent(domain);
   return [
-    "https://" + domain + "/apple-touch-icon.png",
-    "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(domain) + "&sz=128",
-    iconHorseUrl(domain),
+    "https://" + domain + "/apple-touch-icon.png", // site's own high-res icon
+    "https://icons.duckduckgo.com/ip3/" + d + ".ico", // reliable on most networks
+    "https://www.google.com/s2/favicons?domain=" + d + "&sz=128",
+    iconHorseUrl(domain), // parses HTML for non-standard icon paths
   ];
 }
 
-// Load the first candidate that yields a real logo. Rejects images that
-// fail to decode and the tiny placeholder globes (<=16px). Calls onFail
-// when nothing usable remains.
+// Probe every candidate in parallel and display the highest-priority one
+// that yields a real image (decodes and is >16px, so placeholder globes
+// are rejected). Falls through past a candidate as soon as it errors,
+// times out, or returns a placeholder — so one blocked/hung source can't
+// hold up the others. Calls onFail when nothing usable loads.
 function loadBestLogo(img, candidates, onFail) {
-  let i = -1;
-  let timer = null;
-  const advance = () => {
-    clearTimeout(timer);
-    i += 1;
-    if (i >= candidates.length) {
-      onFail();
-      return;
+  const n = candidates.length;
+  if (!n) {
+    onFail();
+    return;
+  }
+  const status = new Array(n).fill("pending"); // "pending" | "ok" | "fail"
+  let committed = false;
+
+  const decide = () => {
+    if (committed) return;
+    for (let k = 0; k < n; k++) {
+      if (status[k] === "pending") return; // wait for a higher priority result
+      if (status[k] === "ok") {
+        committed = true;
+        img.src = candidates[k]; // already in cache from the probe
+        return;
+      }
     }
-    // Safety net: an HTML error page served for an icon path can leave the
-    // <img> firing neither load nor error in Safari — don't hang on it.
-    timer = setTimeout(advance, 2500);
-    img.src = candidates[i];
+    committed = true;
+    onFail();
   };
-  img.onerror = advance;
-  img.onload = () => {
-    // Advance if the image didn't really decode (0 width, e.g. an empty
-    // 200 response) or is a tiny placeholder globe (<=16px)
-    if (!img.naturalWidth || img.naturalWidth <= 16) {
-      advance();
-      return;
-    }
-    clearTimeout(timer); // good logo — stop here
-  };
-  advance();
+
+  candidates.forEach((src, k) => {
+    const probe = new Image();
+    let settled = false;
+    const mark = (s) => {
+      if (settled || committed) return;
+      settled = true;
+      status[k] = s;
+      decide();
+    };
+    probe.onload = () => mark(probe.naturalWidth > 16 ? "ok" : "fail");
+    probe.onerror = () => mark("fail");
+    setTimeout(() => mark("fail"), 2000); // don't wait forever on a hung source
+    probe.src = src;
+  });
 }
 
 function hslToRgb(h, s, l) {
