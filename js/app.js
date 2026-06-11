@@ -69,15 +69,6 @@ function normalizeDomain(value) {
     .split("/")[0];
 }
 
-// Guess a domain from the first word of the card name, e.g.
-// "Tesco Clubcard" -> "tesco.com"; returns null for non-latin names
-function guessDomain(name) {
-  const first = (name.trim().split(/\s+/)[0] || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "");
-  return first.length >= 3 ? first + ".com" : null;
-}
-
 // icon.horse parses a site's HTML for its declared icon, so it finds logos
 // at non-standard paths that the conventions below miss. It's also
 // CORS-enabled, which lets us read its pixels for color extraction.
@@ -170,7 +161,7 @@ function probeLogoUrl(url) {
 }
 
 async function diagnoseLogo(card) {
-  const domain = card.domain || guessDomain(card.name);
+  const domain = card.domain;
   const labelled = [];
   if (card.logo) labelled.push(["logo override", card.logo]);
   if (domain) {
@@ -392,7 +383,7 @@ function makeThumb(card) {
     wrap.appendChild(av);
   };
 
-  const domain = card.domain || guessDomain(card.name);
+  const domain = card.domain;
   // An explicit logo URL (user override) is tried before the auto sources
   const candidates = [];
   if (card.logo) candidates.push(card.logo);
@@ -461,7 +452,7 @@ function renderCardList() {
     // best color source. Otherwise prefer icon.horse (CORS-enabled) so we
     // never probe a non-CORS host URL with crossOrigin (which would fail
     // and poison the image cache, breaking the visible logo).
-    const domain = card.domain || guessDomain(card.name);
+    const domain = card.domain;
     const isDataLogo = card.logo && card.logo.indexOf("data:") === 0;
     const colorSrc = isDataLogo
       ? card.logo
