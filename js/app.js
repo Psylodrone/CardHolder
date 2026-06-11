@@ -600,8 +600,37 @@ function wireCompanySearch(input, dropdown, nameInput) {
     dropdown.innerHTML = "";
   }
 
-  function render(matches) {
+  function render(matches, q) {
     dropdown.innerHTML = "";
+
+    // If they typed something domain-like (e.g. "grand-petrol.com.ua"),
+    // offer to use it directly as the website — the reliable way to set a
+    // brand the search database doesn't know.
+    const typedDomain = q && q.includes(".") ? normalizeDomain(q) : null;
+    if (typedDomain) {
+      const useItem = document.createElement("div");
+      useItem.className = "dropdown-item";
+      const img = document.createElement("img");
+      img.alt = "";
+      loadBestLogo(img, logoCandidates(typedDomain), () => img.remove());
+      useItem.appendChild(img);
+      const text = document.createElement("div");
+      const nameEl = document.createElement("div");
+      nameEl.className = "dd-name";
+      nameEl.textContent = "Use “" + typedDomain + "”";
+      const subEl = document.createElement("div");
+      subEl.className = "dd-domain";
+      subEl.textContent = "as this card's website";
+      text.appendChild(nameEl);
+      text.appendChild(subEl);
+      useItem.appendChild(text);
+      useItem.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        input.value = typedDomain;
+        hide();
+      });
+      dropdown.appendChild(useItem);
+    }
 
     matches.slice(0, 5).forEach((m) => {
       const item = document.createElement("div");
@@ -663,8 +692,7 @@ function wireCompanySearch(input, dropdown, nameInput) {
         if (ctrl) ctrl.abort();
         ctrl = new AbortController();
         const matches = await fetchCompanySuggestions(q, ctrl.signal);
-        if (matches.length) render(matches);
-        else hide();
+        render(matches, q);
       } catch (e) {
         // aborted or offline — leave the dropdown closed
       }
