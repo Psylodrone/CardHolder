@@ -28,10 +28,6 @@ const scanResultEl = document.getElementById("scan-result");
 const cardNameInput = document.getElementById("card-name-input");
 const cardDomainInput = document.getElementById("card-domain-input");
 const domainDropdown = document.getElementById("domain-dropdown");
-const cardLogoInput = document.getElementById("card-logo-input");
-const addLogoBtn = document.getElementById("add-logo-btn");
-const addLogoFile = document.getElementById("add-logo-file");
-const addLogoPreview = document.getElementById("add-logo-preview");
 const cardCodeInput = document.getElementById("card-code-input");
 const manualBtn = document.getElementById("manual-btn");
 const formatField = document.getElementById("format-field");
@@ -319,55 +315,90 @@ function fileToLogoDataUrl(file) {
   });
 }
 
-// Wire a logo editor: a "Choose image" button (photo/camera), an optional
-// URL field, and a live preview. Both inputs feed one value (a URL or a
-// data URL) exposed via get()/set().
-function wireLogoEditor(btn, fileInput, urlInput, preview) {
-  let value = null;
+const CAMERA_SVG =
+  '<svg class="logo-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+  'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M3 8.5A1.5 1.5 0 0 1 4.5 7H7l1.2-1.8h7.6L17 7h2.5A1.5 1.5 0 0 1 21 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18z"/>' +
+  '<circle cx="12" cy="13" r="3.3"/></svg><span class="logo-box-plus">+</span>';
 
-  function render() {
-    preview.innerHTML = "";
-    if (!value) return;
-    const img = document.createElement("img");
-    img.alt = "";
-    img.onerror = () => {
-      preview.innerHTML = "";
-    };
-    img.src = value;
-    preview.appendChild(img);
+const PENCIL_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+
+// A clickable logo box: shows a camera+ when empty, the logo when one is
+// found (from a chosen image/URL or the card's domain), or a letter +
+// edit badge when a domain is set but no logo loads. Clicking it calls
+// openChooser. getName/getDomain are read live so it reflects the form.
+function createLogoBox(boxEl, getName, getDomain, openChooser) {
+  let custom = null; // user-chosen image (URL or data URL), overrides domain
+
+  function reset(cls) {
+    boxEl.className = "logo-box" + (cls ? " " + cls : "");
+    boxEl.innerHTML = "";
   }
 
-  btn.addEventListener("click", () => fileInput.click());
+  function badge() {
+    const b = document.createElement("span");
+    b.className = "logo-box-edit";
+    b.innerHTML = PENCIL_SVG;
+    boxEl.appendChild(b);
+  }
 
-  fileInput.addEventListener("change", async () => {
-    const file = fileInput.files[0];
-    fileInput.value = "";
-    if (!file) return;
-    try {
-      value = await fileToLogoDataUrl(file);
-      urlInput.value = ""; // a chosen image overrides any pasted URL
-      render();
-    } catch (e) {
-      alert("Couldn't read that image.");
+  function showEmpty() {
+    reset("is-empty");
+    boxEl.innerHTML = CAMERA_SVG;
+  }
+
+  function showLetter() {
+    reset("is-letter");
+    const name = (getName() || "").trim();
+    boxEl.style.setProperty("--logo-bg", rgbStr(fallbackColor(name || "?")));
+    const span = document.createElement("span");
+    span.className = "logo-box-letter";
+    span.textContent = (name[0] || "?").toUpperCase();
+    boxEl.appendChild(span);
+    badge();
+  }
+
+  function showImage(candidates, onFail) {
+    reset("has-image");
+    const img = document.createElement("img");
+    img.alt = "";
+    boxEl.appendChild(img);
+    badge();
+    loadBestLogo(img, candidates, onFail);
+  }
+
+  function render() {
+    if (custom) {
+      showImage([custom], showLetter);
+    } else if (getDomain()) {
+      showImage(logoCandidates(getDomain()), showLetter);
+    } else {
+      showEmpty();
+    }
+  }
+
+  boxEl.addEventListener("click", () => openChooser(api));
+  boxEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openChooser(api);
     }
   });
 
-  urlInput.addEventListener("input", () => {
-    value = urlInput.value.trim() || null;
-    render();
-  });
-
-  return {
-    get() {
-      return value;
+  const api = {
+    refresh: render,
+    getValue() {
+      return custom;
     },
-    set(v) {
-      value = v || null;
-      // Show plain URLs in the text field; keep data URLs in state only
-      urlInput.value = value && value.indexOf("data:") !== 0 ? value : "";
+    setValue(v) {
+      custom = v || null;
       render();
     },
   };
+  return api;
 }
 
 function makeThumb(card) {
@@ -581,10 +612,11 @@ formatSelect.addEventListener("change", updatePreview);
 
 // --- Company search dropdown (reusable for add and edit forms) ---
 
-function wireCompanySearch(input, dropdown, nameInput) {
+function wireCompanySearch(input, dropdown, nameInput, onChange) {
   let manualMode = false;
   let debounce = null;
   let ctrl = null;
+  const notify = () => onChange && onChange();
 
   function hide() {
     dropdown.hidden = true;
@@ -619,6 +651,7 @@ function wireCompanySearch(input, dropdown, nameInput) {
         e.preventDefault();
         input.value = typedDomain;
         hide();
+        notify();
       });
       dropdown.appendChild(useItem);
     }
@@ -650,6 +683,7 @@ function wireCompanySearch(input, dropdown, nameInput) {
         // Auto-fill the card name from the company, unless one's already set
         if (nameInput && !nameInput.value.trim()) nameInput.value = m.name;
         hide();
+        notify();
       });
       dropdown.appendChild(item);
     });
@@ -664,6 +698,7 @@ function wireCompanySearch(input, dropdown, nameInput) {
       input.placeholder = "e.g. tesco.com";
       hide();
       input.focus();
+      notify();
     });
     dropdown.appendChild(manual);
 
@@ -672,6 +707,7 @@ function wireCompanySearch(input, dropdown, nameInput) {
 
   input.addEventListener("input", () => {
     const q = input.value.trim();
+    notify(); // keep the logo box in sync as the domain is typed
     if (q === "") manualMode = false;
     if (manualMode || q.length < 2) {
       hide();
@@ -781,12 +817,76 @@ async function fetchCompanySuggestions(q, signal) {
   return merged;
 }
 
-const addSearch = wireCompanySearch(cardDomainInput, domainDropdown, cardNameInput);
-const addLogoEditor = wireLogoEditor(addLogoBtn, addLogoFile, cardLogoInput, addLogoPreview);
+// --- Shared logo chooser sheet ---
+
+const logoModal = document.getElementById("logo-modal");
+const lmFile = document.getElementById("lm-file");
+const lmUrl = document.getElementById("lm-url");
+let activeLogoBox = null;
+
+function domainFromInput(input) {
+  const t = normalizeDomain(input.value);
+  return t.includes(".") ? t : null;
+}
+
+function openLogoChooser(box) {
+  activeLogoBox = box;
+  const v = box.getValue();
+  lmUrl.value = v && v.indexOf("data:") !== 0 ? v : "";
+  logoModal.hidden = false;
+}
+
+function closeLogoChooser() {
+  logoModal.hidden = true;
+  activeLogoBox = null;
+}
+
+document.getElementById("lm-photo").addEventListener("click", () => lmFile.click());
+
+lmFile.addEventListener("change", async () => {
+  const file = lmFile.files[0];
+  lmFile.value = "";
+  if (!file || !activeLogoBox) return;
+  try {
+    activeLogoBox.setValue(await fileToLogoDataUrl(file));
+    closeLogoChooser();
+  } catch (e) {
+    alert("Couldn't read that image.");
+  }
+});
+
+document.getElementById("lm-use-url").addEventListener("click", () => {
+  if (activeLogoBox) activeLogoBox.setValue(lmUrl.value.trim() || null);
+  closeLogoChooser();
+});
+
+document.getElementById("lm-remove").addEventListener("click", () => {
+  if (activeLogoBox) activeLogoBox.setValue(null);
+  closeLogoChooser();
+});
+
+document.getElementById("lm-cancel").addEventListener("click", closeLogoChooser);
+logoModal.addEventListener("click", (e) => {
+  if (e.target === logoModal) closeLogoChooser();
+});
+
+const addLogoBox = createLogoBox(
+  document.getElementById("add-logo-box"),
+  () => cardNameInput.value,
+  () => domainFromInput(cardDomainInput),
+  openLogoChooser
+);
+
+const addSearch = wireCompanySearch(
+  cardDomainInput,
+  domainDropdown,
+  cardNameInput,
+  () => addLogoBox.refresh()
+);
 
 function resetDomainField() {
   addSearch.reset();
-  addLogoEditor.set(null);
+  addLogoBox.setValue(null);
 }
 
 photoBtn.addEventListener("click", () => photoInput.click());
@@ -860,7 +960,7 @@ document.getElementById("save-card-btn").addEventListener("click", () => {
   // dot). Free-text left over from searching falls back to the name guess.
   const typed = normalizeDomain(cardDomainInput.value);
   const domain = typed.includes(".") ? typed : null;
-  const logo = addLogoEditor.get();
+  const logo = addLogoBox.getValue();
 
   const cards = loadCards();
   cards.push({ id: makeId(), name, code, format, domain, logo });
@@ -888,17 +988,24 @@ document.getElementById("delete-card-btn").addEventListener("click", () => {
 const editDomainInput = document.getElementById("edit-domain-input");
 const editDropdown = document.getElementById("edit-dropdown");
 const editNameInput = document.getElementById("edit-name-input");
-const editLogoInput = document.getElementById("edit-logo-input");
-const editLogoBtn = document.getElementById("edit-logo-btn");
-const editLogoFile = document.getElementById("edit-logo-file");
-const editLogoPreview = document.getElementById("edit-logo-preview");
 const editCodeInput = document.getElementById("edit-code-input");
 const editFormatSelect = document.getElementById("edit-format-select");
 const editPreviewField = document.getElementById("edit-preview-field");
 const editPreviewEl = document.getElementById("edit-preview");
 
-const editSearch = wireCompanySearch(editDomainInput, editDropdown, editNameInput);
-const editLogoEditor = wireLogoEditor(editLogoBtn, editLogoFile, editLogoInput, editLogoPreview);
+const editLogoBox = createLogoBox(
+  document.getElementById("edit-logo-box"),
+  () => editNameInput.value,
+  () => domainFromInput(editDomainInput),
+  openLogoChooser
+);
+
+const editSearch = wireCompanySearch(
+  editDomainInput,
+  editDropdown,
+  editNameInput,
+  () => editLogoBox.refresh()
+);
 
 const editDiagBtn = document.getElementById("edit-diag-btn");
 const editDiagOutput = document.getElementById("edit-diag-output");
@@ -909,11 +1016,10 @@ editDiagBtn.addEventListener("click", async () => {
   editDiagOutput.hidden = false;
   editDiagOutput.value = "Testing each logo source…";
   // Reflect any unsaved edits to domain/logo in the test
-  const typed = normalizeDomain(editDomainInput.value);
   const probe = {
     name: editNameInput.value || card.name,
-    domain: typed.includes(".") ? typed : null,
-    logo: editLogoEditor.get(),
+    domain: domainFromInput(editDomainInput),
+    logo: editLogoBox.getValue(),
   };
   editDiagOutput.value = await diagnoseLogo(probe);
 });
@@ -939,7 +1045,7 @@ function openEdit(id) {
   editSearch.reset();
   editDomainInput.value = card.domain || "";
   editNameInput.value = card.name;
-  editLogoEditor.set(card.logo || null);
+  editLogoBox.setValue(card.logo || null);
   editCodeInput.value = card.code;
   editFormatSelect.value = FORMAT_MAP[card.format] ? card.format : "CODE_128";
   editDropdown.hidden = true;
@@ -964,7 +1070,7 @@ document.getElementById("edit-save-btn").addEventListener("click", () => {
 
   const typed = normalizeDomain(editDomainInput.value);
   const newDomain = typed.includes(".") ? typed : null;
-  const newLogo = editLogoEditor.get();
+  const newLogo = editLogoBox.getValue();
 
   // If the logo source changed, drop the cached color so it recomputes
   if (newDomain !== card.domain || newLogo !== card.logo) delete card.bg;
