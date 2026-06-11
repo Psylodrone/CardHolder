@@ -58,5 +58,23 @@ const Scanner = (() => {
     }
   }
 
-  return { start, stop };
+  // Decode a still photo (full camera resolution, much more reliable
+  // than video frames for small barcodes)
+  async function scanFile(file) {
+    await stop();
+    if (!html5QrCode) {
+      html5QrCode = new Html5Qrcode("reader");
+    }
+    if (typeof html5QrCode.scanFileV2 === "function") {
+      const res = await html5QrCode.scanFileV2(file, false);
+      return {
+        text: res.decodedText,
+        format: res.result?.format?.formatName || "UNKNOWN",
+      };
+    }
+    const text = await html5QrCode.scanFile(file, false);
+    return { text, format: "UNKNOWN" };
+  }
+
+  return { start, stop, scanFile };
 })();

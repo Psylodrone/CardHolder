@@ -30,6 +30,8 @@ const cardCodeInput = document.getElementById("card-code-input");
 const manualBtn = document.getElementById("manual-btn");
 const formatField = document.getElementById("format-field");
 const formatSelect = document.getElementById("card-format-select");
+const photoBtn = document.getElementById("photo-btn");
+const photoInput = document.getElementById("photo-input");
 const previewField = document.getElementById("preview-field");
 const previewEl = document.getElementById("manual-preview");
 
@@ -133,6 +135,7 @@ function startScan() {
   scanResultEl.hidden = true;
   formatField.hidden = true;
   manualBtn.hidden = false;
+  photoBtn.hidden = false;
   readerEl.hidden = false;
   readerEl.innerHTML = "";
   Scanner.start((decodedText, formatName) => {
@@ -152,6 +155,7 @@ function startManualEntry() {
   Scanner.stop();
   readerEl.hidden = true;
   manualBtn.hidden = true;
+  photoBtn.hidden = true;
   cardNameInput.value = "";
   cardCodeInput.value = "";
   formatSelect.value = "CODE_128";
@@ -202,6 +206,37 @@ cardCodeInput.addEventListener("input", () => {
 });
 
 formatSelect.addEventListener("change", updatePreview);
+
+photoBtn.addEventListener("click", () => photoInput.click());
+
+photoInput.addEventListener("change", () => {
+  const file = photoInput.files[0];
+  photoInput.value = "";
+  if (!file) return;
+
+  Scanner.scanFile(file)
+    .then(({ text, format }) => {
+      readerEl.hidden = true;
+      manualBtn.hidden = true;
+      photoBtn.hidden = true;
+      cardCodeInput.value = text;
+      cardNameInput.value = "";
+      if (format === "UNKNOWN") {
+        formatSelect.value = guessFormat(text);
+        formatField.hidden = false;
+      } else {
+        scanResultEl.dataset.format = format;
+        formatField.hidden = true;
+      }
+      scanResultEl.hidden = false;
+      updatePreview();
+      cardNameInput.focus();
+    })
+    .catch(() => {
+      alert("No barcode found in that photo. Try getting closer or improving lighting.");
+      startScan();
+    });
+});
 
 function openDetail(id) {
   const cards = loadCards();
