@@ -29,6 +29,9 @@ const cardNameInput = document.getElementById("card-name-input");
 const cardDomainInput = document.getElementById("card-domain-input");
 const domainDropdown = document.getElementById("domain-dropdown");
 const cardLogoInput = document.getElementById("card-logo-input");
+const addLogoBtn = document.getElementById("add-logo-btn");
+const addLogoFile = document.getElementById("add-logo-file");
+const addLogoPreview = document.getElementById("add-logo-preview");
 const cardCodeInput = document.getElementById("card-code-input");
 const manualBtn = document.getElementById("manual-btn");
 const formatField = document.getElementById("format-field");
@@ -211,8 +214,12 @@ function extractLogoColor(src) {
     };
     img.onerror = () => resolve(null);
     // Distinct cache key so this crossOrigin probe never shares a cache
-    // entry with the plain <img> that displays the same logo.
-    img.src = src + (src.includes("?") ? "&" : "?") + "ch_color=1";
+    // entry with the plain <img> that displays the same logo. (Data URLs
+    // are local and self-contained — never append to them.)
+    img.src =
+      src.indexOf("data:") === 0
+        ? src
+        : src + (src.includes("?") ? "&" : "?") + "ch_color=1";
   });
 }
 
@@ -224,6 +231,84 @@ function persistCardColor(id, color) {
     card.bg = color;
     saveCards(cards);
   }
+}
+
+// Read an image file and return a downscaled (max 128px) PNG data URL,
+// so a user-picked logo is small enough to store in localStorage and
+// displays with no network (works even when favicon services are blocked).
+function fileToLogoDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const max = 128;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Wire a logo editor: a "Choose image" button (photo/camera), an optional
+// URL field, and a live preview. Both inputs feed one value (a URL or a
+// data URL) exposed via get()/set().
+function wireLogoEditor(btn, fileInput, urlInput, preview) {
+  let value = null;
+
+  function render() {
+    preview.innerHTML = "";
+    if (!value) return;
+    const img = document.createElement("img");
+    img.alt = "";
+    img.onerror = () => {
+      preview.innerHTML = "";
+    };
+    img.src = value;
+    preview.appendChild(img);
+  }
+
+  btn.addEventListener("click", () => fileInput.click());
+
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files[0];
+    fileInput.value = "";
+    if (!file) return;
+    try {
+      value = await fileToLogoDataUrl(file);
+      urlInput.value = ""; // a chosen image overrides any pasted URL
+      render();
+    } catch (e) {
+      alert("Couldn't read that image.");
+    }
+  });
+
+  urlInput.addEventListener("input", () => {
+    value = urlInput.value.trim() || null;
+    render();
+  });
+
+  return {
+    get() {
+      return value;
+    },
+    set(v) {
+      value = v || null;
+      // Show plain URLs in the text field; keep data URLs in state only
+      urlInput.value = value && value.indexOf("data:") !== 0 ? value : "";
+      render();
+    },
+  };
 }
 
 function makeThumb(card) {
@@ -304,11 +389,15 @@ function renderCardList() {
     // If we haven't already cached a color, derive it from the logo.
     // icon.horse is CORS-enabled, so its pixels are readable (unlike the
     // apple-touch-icon / Google favicon sources).
-    // Prefer icon.horse (CORS-enabled) for color so we never probe the
-    // displayed logo URL with crossOrigin — that would fail for non-CORS
-    // hosts and poison the image cache, breaking the visible logo.
+    // A user-picked image (data URL) is local and readable, so it's the
+    // best color source. Otherwise prefer icon.horse (CORS-enabled) so we
+    // never probe a non-CORS host URL with crossOrigin (which would fail
+    // and poison the image cache, breaking the visible logo).
     const domain = card.domain || guessDomain(card.name);
-    const colorSrc = (domain && iconHorseUrl(domain)) || card.logo;
+    const isDataLogo = card.logo && card.logo.indexOf("data:") === 0;
+    const colorSrc = isDataLogo
+      ? card.logo
+      : (domain && iconHorseUrl(domain)) || card.logo;
     if (!card.bg && colorSrc) {
       extractLogoColor(colorSrc).then((color) => {
         if (color) {
@@ -606,10 +695,11 @@ async function fetchCompanySuggestions(q, signal) {
 }
 
 const addSearch = wireCompanySearch(cardDomainInput, domainDropdown, cardNameInput);
+const addLogoEditor = wireLogoEditor(addLogoBtn, addLogoFile, cardLogoInput, addLogoPreview);
 
 function resetDomainField() {
   addSearch.reset();
-  cardLogoInput.value = "";
+  addLogoEditor.set(null);
 }
 
 photoBtn.addEventListener("click", () => photoInput.click());
@@ -683,7 +773,7 @@ document.getElementById("save-card-btn").addEventListener("click", () => {
   // dot). Free-text left over from searching falls back to the name guess.
   const typed = normalizeDomain(cardDomainInput.value);
   const domain = typed.includes(".") ? typed : null;
-  const logo = cardLogoInput.value.trim() || null;
+  const logo = addLogoEditor.get();
 
   const cards = loadCards();
   cards.push({ id: makeId(), name, code, format, domain, logo });
@@ -712,12 +802,16 @@ const editDomainInput = document.getElementById("edit-domain-input");
 const editDropdown = document.getElementById("edit-dropdown");
 const editNameInput = document.getElementById("edit-name-input");
 const editLogoInput = document.getElementById("edit-logo-input");
+const editLogoBtn = document.getElementById("edit-logo-btn");
+const editLogoFile = document.getElementById("edit-logo-file");
+const editLogoPreview = document.getElementById("edit-logo-preview");
 const editCodeInput = document.getElementById("edit-code-input");
 const editFormatSelect = document.getElementById("edit-format-select");
 const editPreviewField = document.getElementById("edit-preview-field");
 const editPreviewEl = document.getElementById("edit-preview");
 
 const editSearch = wireCompanySearch(editDomainInput, editDropdown, editNameInput);
+const editLogoEditor = wireLogoEditor(editLogoBtn, editLogoFile, editLogoInput, editLogoPreview);
 
 function updateEditPreview() {
   const code = editCodeInput.value.trim();
@@ -740,7 +834,7 @@ function openEdit(id) {
   editSearch.reset();
   editDomainInput.value = card.domain || "";
   editNameInput.value = card.name;
-  editLogoInput.value = card.logo || "";
+  editLogoEditor.set(card.logo || null);
   editCodeInput.value = card.code;
   editFormatSelect.value = FORMAT_MAP[card.format] ? card.format : "CODE_128";
   editDropdown.hidden = true;
@@ -765,7 +859,7 @@ document.getElementById("edit-save-btn").addEventListener("click", () => {
 
   const typed = normalizeDomain(editDomainInput.value);
   const newDomain = typed.includes(".") ? typed : null;
-  const newLogo = editLogoInput.value.trim() || null;
+  const newLogo = editLogoEditor.get();
 
   // If the logo source changed, drop the cached color so it recomputes
   if (newDomain !== card.domain || newLogo !== card.logo) delete card.bg;

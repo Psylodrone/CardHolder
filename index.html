@@ -17,7 +17,7 @@
     <header>
       <button id="back-btn" hidden aria-label="Back">&larr;</button>
       <h1 id="header-title">CardHolder</h1>
-      <span id="app-version">v26</span>
+      <span id="app-version">v27</span>
       <button id="add-btn" aria-label="Add card">+</button>
     </header>
 
@@ -48,8 +48,13 @@
             <input id="card-name-input" type="text" placeholder="e.g. Tesco Clubcard" />
           </div>
           <div class="field">
-            <label for="card-logo-input">Logo URL (optional, if logo is wrong)</label>
-            <input id="card-logo-input" type="text" placeholder="https://…/logo.png" autocapitalize="none" autocorrect="off" />
+            <label>Logo (optional)</label>
+            <div class="logo-edit">
+              <div class="logo-preview" id="add-logo-preview"></div>
+              <button type="button" id="add-logo-btn" class="btn btn-secondary logo-btn">Choose image</button>
+            </div>
+            <input type="file" id="add-logo-file" accept="image/*" hidden />
+            <input id="card-logo-input" type="text" placeholder="…or paste an image URL" autocapitalize="none" autocorrect="off" />
           </div>
           <div class="field">
             <label for="card-code-input">Card code</label>
@@ -101,8 +106,13 @@
             <input id="edit-name-input" type="text" placeholder="Card name" />
           </div>
           <div class="field">
-            <label for="edit-logo-input">Logo URL (optional, if logo is wrong)</label>
-            <input id="edit-logo-input" type="text" placeholder="https://…/logo.png" autocapitalize="none" autocorrect="off" />
+            <label>Logo (optional)</label>
+            <div class="logo-edit">
+              <div class="logo-preview" id="edit-logo-preview"></div>
+              <button type="button" id="edit-logo-btn" class="btn btn-secondary logo-btn">Choose image</button>
+            </div>
+            <input type="file" id="edit-logo-file" accept="image/*" hidden />
+            <input id="edit-logo-input" type="text" placeholder="…or paste an image URL" autocapitalize="none" autocorrect="off" />
           </div>
           <div class="field">
             <label for="edit-code-input">Card code</label>
