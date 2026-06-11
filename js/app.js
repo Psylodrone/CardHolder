@@ -73,8 +73,13 @@ function guessDomain(name) {
   return first.length >= 3 ? first + ".com" : null;
 }
 
-function faviconUrl(domain) {
-  return "https://icons.duckduckgo.com/ip3/" + encodeURIComponent(domain) + ".ico";
+// Logo sources in order of quality: the site's own high-res
+// apple-touch-icon (180x180 by convention), then favicon service
+function logoCandidates(domain) {
+  return [
+    "https://" + domain + "/apple-touch-icon.png",
+    "https://icons.duckduckgo.com/ip3/" + encodeURIComponent(domain) + ".ico",
+  ];
 }
 
 function colorFor(str) {
@@ -98,11 +103,20 @@ function makeThumb(card) {
 
   const domain = card.domain || guessDomain(card.name);
   if (domain) {
+    const candidates = logoCandidates(domain);
+    let attempt = 0;
     const img = document.createElement("img");
     img.className = "card-logo";
     img.alt = "";
-    img.src = faviconUrl(domain);
-    img.onerror = showAvatar;
+    img.onerror = () => {
+      attempt += 1;
+      if (attempt < candidates.length) {
+        img.src = candidates[attempt];
+      } else {
+        showAvatar();
+      }
+    };
+    img.src = candidates[0];
     wrap.appendChild(img);
   } else {
     showAvatar();
