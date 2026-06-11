@@ -28,6 +28,7 @@ const scanResultEl = document.getElementById("scan-result");
 const cardNameInput = document.getElementById("card-name-input");
 const cardDomainInput = document.getElementById("card-domain-input");
 const domainDropdown = document.getElementById("domain-dropdown");
+const cardLogoInput = document.getElementById("card-logo-input");
 const cardCodeInput = document.getElementById("card-code-input");
 const manualBtn = document.getElementById("manual-btn");
 const formatField = document.getElementById("format-field");
@@ -207,11 +208,16 @@ function makeThumb(card) {
   };
 
   const domain = card.domain || guessDomain(card.name);
-  if (domain) {
+  // An explicit logo URL (user override) is tried before the auto sources
+  const candidates = [];
+  if (card.logo) candidates.push(card.logo);
+  if (domain) candidates.push(...logoCandidates(domain));
+
+  if (candidates.length) {
     const img = document.createElement("img");
     img.className = "card-logo";
     img.alt = "";
-    loadBestLogo(img, logoCandidates(domain), showAvatar);
+    loadBestLogo(img, candidates, showAvatar);
     wrap.appendChild(img);
   } else {
     showAvatar();
@@ -267,8 +273,9 @@ function renderCardList() {
     // icon.horse is CORS-enabled, so its pixels are readable (unlike the
     // apple-touch-icon / Google favicon sources).
     const domain = card.domain || guessDomain(card.name);
-    if (!card.bg && domain) {
-      extractLogoColor(iconHorseUrl(domain)).then((color) => {
+    const colorSrc = card.logo || (domain && iconHorseUrl(domain));
+    if (!card.bg && colorSrc) {
+      extractLogoColor(colorSrc).then((color) => {
         if (color) {
           applyColor(color);
           persistCardColor(card.id, color);
@@ -403,6 +410,7 @@ function hideDomainDropdown() {
 function resetDomainField() {
   cardDomainInput.value = "";
   cardDomainInput.placeholder = "Search company…";
+  cardLogoInput.value = "";
   domainManualMode = false;
   hideDomainDropdown();
 }
@@ -628,9 +636,10 @@ document.getElementById("save-card-btn").addEventListener("click", () => {
   // dot). Free-text left over from searching falls back to the name guess.
   const typed = normalizeDomain(cardDomainInput.value);
   const domain = typed.includes(".") ? typed : null;
+  const logo = cardLogoInput.value.trim() || null;
 
   const cards = loadCards();
-  cards.push({ id: makeId(), name, code, format, domain });
+  cards.push({ id: makeId(), name, code, format, domain, logo });
   saveCards(cards);
 
   showView("view-home", "CardHolder");
