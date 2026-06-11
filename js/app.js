@@ -144,6 +144,74 @@ function loadBestLogo(img, candidates, onFail) {
   });
 }
 
+// --- Logo diagnostics (debug) ---
+
+// Probe one URL and report exactly what happened, the way an <img> sees it
+function probeLogoUrl(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const t0 = Date.now();
+    let done = false;
+    const finish = (status) => {
+      if (done) return;
+      done = true;
+      resolve({ url, status, ms: Date.now() - t0 });
+    };
+    img.onload = () =>
+      finish(
+        img.naturalWidth > 16
+          ? "OK " + img.naturalWidth + "x" + img.naturalHeight
+          : "TOO SMALL " + img.naturalWidth + "x" + img.naturalHeight + " (rejected as placeholder)"
+      );
+    img.onerror = () => finish("FAILED (blocked / 404 / not an image)");
+    setTimeout(() => finish("TIMEOUT (no response in 6s — likely blocked or hung)"), 6000);
+    img.src = url;
+  });
+}
+
+async function diagnoseLogo(card) {
+  const domain = card.domain || guessDomain(card.name);
+  const labelled = [];
+  if (card.logo) labelled.push(["logo override", card.logo]);
+  if (domain) {
+    const names = ["apple-touch-icon", "duckduckgo", "google-favicon", "icon.horse"];
+    logoCandidates(domain).forEach((u, i) => labelled.push([names[i] || "source", u]));
+  }
+
+  const head = [
+    "CardHolder logo debug — " +
+      (document.getElementById("app-version") || {}).textContent,
+    "online: " + navigator.onLine +
+      "  |  serviceWorker: " +
+      (navigator.serviceWorker && navigator.serviceWorker.controller ? "active" : "none"),
+    "card name: " + card.name,
+    "domain: " + (domain || "(none)"),
+    "override: " +
+      (card.logo
+        ? card.logo.indexOf("data:") === 0
+          ? "(local image, " + card.logo.length + " chars)"
+          : card.logo
+        : "(none)"),
+    "candidates: " + labelled.length,
+    "",
+  ];
+
+  const results = await Promise.all(
+    labelled.map(([label, url]) =>
+      probeLogoUrl(url).then((r) => ({ label, ...r }))
+    )
+  );
+
+  const body = [];
+  results.forEach((r) => {
+    body.push("[" + r.label + "] " + r.status + "  (" + r.ms + "ms)");
+    const shown = r.url.indexOf("data:") === 0 ? "(local image data)" : r.url;
+    body.push("    " + shown);
+  });
+
+  return head.concat(body).join("\n");
+}
+
 function hslToRgb(h, s, l) {
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
@@ -812,6 +880,24 @@ const editPreviewEl = document.getElementById("edit-preview");
 
 const editSearch = wireCompanySearch(editDomainInput, editDropdown, editNameInput);
 const editLogoEditor = wireLogoEditor(editLogoBtn, editLogoFile, editLogoInput, editLogoPreview);
+
+const editDiagBtn = document.getElementById("edit-diag-btn");
+const editDiagOutput = document.getElementById("edit-diag-output");
+
+editDiagBtn.addEventListener("click", async () => {
+  const card = loadCards().find((c) => c.id === selectedCardId);
+  if (!card) return;
+  editDiagOutput.hidden = false;
+  editDiagOutput.value = "Testing each logo source…";
+  // Reflect any unsaved edits to domain/logo in the test
+  const typed = normalizeDomain(editDomainInput.value);
+  const probe = {
+    name: editNameInput.value || card.name,
+    domain: typed.includes(".") ? typed : null,
+    logo: editLogoEditor.get(),
+  };
+  editDiagOutput.value = await diagnoseLogo(probe);
+});
 
 function updateEditPreview() {
   const code = editCodeInput.value.trim();
