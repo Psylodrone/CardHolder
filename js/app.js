@@ -98,19 +98,31 @@ function logoCandidates(domain) {
 // fail to decode and the tiny placeholder globes (<=16px). Calls onFail
 // when nothing usable remains.
 function loadBestLogo(img, candidates, onFail) {
-  let i = 0;
-  const next = () => {
+  let i = -1;
+  let timer = null;
+  const advance = () => {
+    clearTimeout(timer);
     i += 1;
-    if (i < candidates.length) img.src = candidates[i];
-    else onFail();
+    if (i >= candidates.length) {
+      onFail();
+      return;
+    }
+    // Safety net: an HTML error page served for an icon path can leave the
+    // <img> firing neither load nor error in Safari — don't hang on it.
+    timer = setTimeout(advance, 2500);
+    img.src = candidates[i];
   };
-  img.onerror = next;
+  img.onerror = advance;
   img.onload = () => {
     // Advance if the image didn't really decode (0 width, e.g. an empty
     // 200 response) or is a tiny placeholder globe (<=16px)
-    if (!img.naturalWidth || img.naturalWidth <= 16) next();
+    if (!img.naturalWidth || img.naturalWidth <= 16) {
+      advance();
+      return;
+    }
+    clearTimeout(timer); // good logo — stop here
   };
-  img.src = candidates[0];
+  advance();
 }
 
 function hslToRgb(h, s, l) {
