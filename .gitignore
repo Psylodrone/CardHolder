@@ -1,0 +1,14 @@
+# Local HTTPS certs (mkcert)
+*.pem
+*.key
+*.crt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+
+# Local Claude Code settings
+.claude/settings.local.json
