@@ -333,7 +333,7 @@ function startScan() {
     resetDomainField();
     scanResultEl.hidden = false;
     updatePreview();
-    cardNameInput.focus();
+    cardDomainInput.focus();
   }).catch((err) => {
     alert("Camera error: " + err);
   });
@@ -351,7 +351,7 @@ function startManualEntry() {
   formatField.hidden = false;
   scanResultEl.hidden = false;
   updatePreview();
-  cardNameInput.focus();
+  cardDomainInput.focus();
 }
 
 function currentFormat() {
@@ -442,6 +442,8 @@ function renderDomainDropdown(matches) {
     item.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       cardDomainInput.value = m.domain;
+      // Auto-fill the card name from the company, unless one's already set
+      if (!cardNameInput.value.trim()) cardNameInput.value = m.name;
       hideDomainDropdown();
     });
     domainDropdown.appendChild(item);
@@ -589,7 +591,7 @@ photoInput.addEventListener("change", () => {
       }
       scanResultEl.hidden = false;
       updatePreview();
-      cardNameInput.focus();
+      cardDomainInput.focus();
     })
     .catch(() => {
       alert("No barcode found in that photo. Try getting closer or improving lighting.");
