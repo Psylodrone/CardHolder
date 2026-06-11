@@ -26,6 +26,7 @@ const addBtn = document.getElementById("add-btn");
 const readerEl = document.getElementById("reader");
 const scanResultEl = document.getElementById("scan-result");
 const cardNameInput = document.getElementById("card-name-input");
+const cardDomainInput = document.getElementById("card-domain-input");
 const cardCodeInput = document.getElementById("card-code-input");
 const manualBtn = document.getElementById("manual-btn");
 const formatField = document.getElementById("format-field");
@@ -54,10 +55,59 @@ function makeId() {
   return "id-" + Date.now() + "-" + Math.random().toString(16).slice(2);
 }
 
-function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
+function normalizeDomain(value) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0];
+}
+
+// Guess a domain from the first word of the card name, e.g.
+// "Tesco Clubcard" -> "tesco.com"; returns null for non-latin names
+function guessDomain(name) {
+  const first = (name.trim().split(/\s+/)[0] || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "");
+  return first.length >= 3 ? first + ".com" : null;
+}
+
+function faviconUrl(domain) {
+  return "https://icons.duckduckgo.com/ip3/" + encodeURIComponent(domain) + ".ico";
+}
+
+function colorFor(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) % 360;
+  return "hsl(" + h + ", 55%, 45%)";
+}
+
+function makeThumb(card) {
+  const wrap = document.createElement("div");
+  wrap.className = "card-thumb";
+
+  const showAvatar = () => {
+    wrap.innerHTML = "";
+    const av = document.createElement("div");
+    av.className = "card-avatar";
+    av.style.background = colorFor(card.name);
+    av.textContent = (card.name.trim()[0] || "?").toUpperCase();
+    wrap.appendChild(av);
+  };
+
+  const domain = card.domain || guessDomain(card.name);
+  if (domain) {
+    const img = document.createElement("img");
+    img.className = "card-logo";
+    img.alt = "";
+    img.src = faviconUrl(domain);
+    img.onerror = showAvatar;
+    wrap.appendChild(img);
+  } else {
+    showAvatar();
+  }
+  return wrap;
 }
 
 function showView(id, title) {
@@ -89,13 +139,27 @@ function renderCardList() {
   cards.forEach((card) => {
     const li = document.createElement("li");
     li.className = "card-item";
-    li.innerHTML = `
-      <div>
-        <div class="card-name">${escapeHtml(card.name)}</div>
-        <div class="card-format">${escapeHtml(card.format)}</div>
-      </div>
-      <div>&rsaquo;</div>
-    `;
+
+    const left = document.createElement("div");
+    left.className = "card-item-left";
+    left.appendChild(makeThumb(card));
+
+    const text = document.createElement("div");
+    const nameEl = document.createElement("div");
+    nameEl.className = "card-name";
+    nameEl.textContent = card.name;
+    const formatEl = document.createElement("div");
+    formatEl.className = "card-format";
+    formatEl.textContent = card.format;
+    text.appendChild(nameEl);
+    text.appendChild(formatEl);
+    left.appendChild(text);
+
+    const chevron = document.createElement("div");
+    chevron.innerHTML = "&rsaquo;";
+
+    li.appendChild(left);
+    li.appendChild(chevron);
     li.addEventListener("click", () => openDetail(card.id));
     list.appendChild(li);
   });
@@ -143,6 +207,7 @@ function startScan() {
     cardCodeInput.value = decodedText;
     scanResultEl.dataset.format = formatName;
     cardNameInput.value = "";
+    cardDomainInput.value = "";
     scanResultEl.hidden = false;
     updatePreview();
     cardNameInput.focus();
@@ -157,6 +222,7 @@ function startManualEntry() {
   manualBtn.hidden = true;
   photoBtn.hidden = true;
   cardNameInput.value = "";
+  cardDomainInput.value = "";
   cardCodeInput.value = "";
   formatSelect.value = "CODE_128";
   formatField.hidden = false;
@@ -221,6 +287,7 @@ photoInput.addEventListener("change", () => {
       photoBtn.hidden = true;
       cardCodeInput.value = text;
       cardNameInput.value = "";
+      cardDomainInput.value = "";
       if (format === "UNKNOWN") {
         formatSelect.value = guessFormat(text);
         formatField.hidden = false;
@@ -273,9 +340,10 @@ document.getElementById("save-card-btn").addEventListener("click", () => {
   }
   const format = formatField.hidden ? scanResultEl.dataset.format : formatSelect.value;
   const name = cardNameInput.value.trim() || "Untitled card";
+  const domain = normalizeDomain(cardDomainInput.value) || null;
 
   const cards = loadCards();
-  cards.push({ id: makeId(), name, code, format });
+  cards.push({ id: makeId(), name, code, format, domain });
   saveCards(cards);
 
   showView("view-home", "CardHolder");

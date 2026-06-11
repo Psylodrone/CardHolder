@@ -14,6 +14,8 @@ const Scanner = (() => {
         const height = Math.floor(Math.min(viewfinderHeight * 0.5, width * 0.5));
         return { width, height };
       },
+      // Square viewfinder instead of full portrait camera frame
+      aspectRatio: 1.0,
       // 2x zoom (where iOS allows it) magnifies small barcodes at full
       // sensor resolution, so they can be scanned from focusable distance
       defaultZoomValueIfSupported: 2,
