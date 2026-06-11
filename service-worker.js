@@ -1,4 +1,4 @@
-const CACHE_NAME = "cardholder-v24";
+const CACHE_NAME = "cardholder-v25";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -32,10 +32,22 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Absolute URLs of the precached app shell (for offline matching)
+const SHELL_URLS = new Set(APP_SHELL.map((u) => new URL(u, self.location).href));
+
 // Network-first: always serve fresh content when online so updates
 // appear on next load; fall back to cache only when offline.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+
+  const url = new URL(event.request.url);
+  const sameOrigin = url.origin === self.location.origin;
+
+  // Only handle our own files and the precached CDN libs. Everything else
+  // (third-party logo images, favicon services, etc.) must bypass the
+  // worker and load natively — intercepting them can stall opaque
+  // cross-origin image loads in the iOS PWA context.
+  if (!sameOrigin && !SHELL_URLS.has(url.href)) return;
 
   // cache: "no-cache" forces revalidation with the server, bypassing
   // GitHub Pages' 10-minute HTTP cache staleness
