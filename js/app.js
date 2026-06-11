@@ -154,26 +154,13 @@ function renderCardList() {
     const li = document.createElement("li");
     li.className = "card-item";
 
-    const left = document.createElement("div");
-    left.className = "card-item-left";
-    left.appendChild(makeThumb(card));
+    li.appendChild(makeThumb(card));
 
-    const text = document.createElement("div");
     const nameEl = document.createElement("div");
     nameEl.className = "card-name";
     nameEl.textContent = card.name;
-    const formatEl = document.createElement("div");
-    formatEl.className = "card-format";
-    formatEl.textContent = card.format;
-    text.appendChild(nameEl);
-    text.appendChild(formatEl);
-    left.appendChild(text);
+    li.appendChild(nameEl);
 
-    const chevron = document.createElement("div");
-    chevron.innerHTML = "&rsaquo;";
-
-    li.appendChild(left);
-    li.appendChild(chevron);
     li.addEventListener("click", () => openDetail(card.id));
     list.appendChild(li);
   });
