@@ -83,10 +83,87 @@ function logoCandidates(domain) {
   ];
 }
 
-function colorFor(str) {
+function hslToRgb(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return {
+    r: Math.round((r + m) * 255),
+    g: Math.round((g + m) * 255),
+    b: Math.round((b + m) * 255),
+  };
+}
+
+// Stable fallback brand color derived from the name
+function fallbackColor(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) % 360;
-  return "hsl(" + h + ", 55%, 45%)";
+  return hslToRgb(h, 0.55, 0.45);
+}
+
+function rgbStr(c) {
+  return "rgb(" + c.r + "," + c.g + "," + c.b + ")";
+}
+
+// Pick black or white text for readability against a background color
+function textColorFor(c) {
+  const lum = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255;
+  return lum > 0.6 ? "#1c1c1e" : "#ffffff";
+}
+
+// Best-effort: read a logo's dominant color. Only works when the image
+// host sends CORS headers; otherwise the canvas is tainted and we return
+// null so the caller keeps the stable fallback color.
+function extractLogoColor(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const size = 24;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, size, size);
+        const data = ctx.getImageData(0, 0, size, size).data;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          const alpha = data[i + 3];
+          if (alpha < 200) continue; // skip transparent areas
+          const cr = data[i], cg = data[i + 1], cb = data[i + 2];
+          // skip near-white and near-black pixels (usually background)
+          const max = Math.max(cr, cg, cb), min = Math.min(cr, cg, cb);
+          if (max > 240 && min > 240) continue;
+          if (max < 25) continue;
+          r += cr; g += cg; b += cb; n++;
+        }
+        if (n === 0) return resolve(null);
+        resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) });
+      } catch (e) {
+        resolve(null); // tainted canvas
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+// Persist a computed color on the card so it's not recomputed each load
+function persistCardColor(id, color) {
+  const cards = loadCards();
+  const card = cards.find((c) => c.id === id);
+  if (card) {
+    card.bg = color;
+    saveCards(cards);
+  }
 }
 
 function makeThumb(card) {
@@ -97,7 +174,7 @@ function makeThumb(card) {
     wrap.innerHTML = "";
     const av = document.createElement("div");
     av.className = "card-avatar";
-    av.style.background = colorFor(card.name);
+    av.style.background = rgbStr(card.bg || fallbackColor(card.name));
     av.textContent = (card.name.trim()[0] || "?").toUpperCase();
     wrap.appendChild(av);
   };
@@ -161,6 +238,24 @@ function renderCardList() {
     nameEl.className = "card-name";
     nameEl.textContent = card.name;
     li.appendChild(nameEl);
+
+    // Colored strip below the logo, with text that adapts for contrast
+    const applyColor = (color) => {
+      nameEl.style.background = rgbStr(color);
+      nameEl.style.color = textColorFor(color);
+    };
+    applyColor(card.bg || fallbackColor(card.name));
+
+    // If we haven't already cached a color, try to derive it from the logo
+    const domain = card.domain || guessDomain(card.name);
+    if (!card.bg && domain) {
+      extractLogoColor(logoCandidates(domain)[0]).then((color) => {
+        if (color) {
+          applyColor(color);
+          persistCardColor(card.id, color);
+        }
+      });
+    }
 
     li.addEventListener("click", () => openDetail(card.id));
     list.appendChild(li);
