@@ -343,8 +343,10 @@ const PENCIL_SVG =
 // A clickable logo box: shows a camera+ when empty, the logo when one is
 // found (from a chosen image/URL or the card's domain), or a letter +
 // edit badge when a domain is set but no logo loads. Clicking it calls
-// openChooser. getName/getDomain are read live so it reflects the form.
-function createLogoBox(boxEl, getName, getDomain, openChooser) {
+// openChooser. getName/getDomain are read live so it reflects the form;
+// setDomain writes a domain back to the form's company field (used when
+// the chooser is given a website URL rather than an image).
+function createLogoBox(boxEl, getName, getDomain, setDomain, openChooser) {
   let custom = null; // user-chosen image (URL or data URL), overrides domain
 
   function reset(cls) {
@@ -415,6 +417,7 @@ function createLogoBox(boxEl, getName, getDomain, openChooser) {
 
   const api = {
     refresh: render,
+    setDomain,
     getValue() {
       return custom;
     },
@@ -852,6 +855,8 @@ async function fetchCompanySuggestions(q, signal) {
     if (!item.domain) continue;
     const key = item.domain.toLowerCase();
     if (seen.has(key)) continue;
+    // Exclude Russian-registered domains from suggestions
+    if (/\.(ru|su|рф)$/.test(key)) continue;
     seen.add(key);
     merged.push(item);
   }
@@ -897,7 +902,24 @@ lmFile.addEventListener("change", async () => {
 });
 
 document.getElementById("lm-use-url").addEventListener("click", () => {
-  if (activeLogoBox) activeLogoBox.setValue(lmUrl.value.trim() || null);
+  if (!activeLogoBox) return closeLogoChooser();
+  const raw = lmUrl.value.trim();
+  if (!raw) {
+    activeLogoBox.setValue(null);
+    return closeLogoChooser();
+  }
+  // A URL with a path (e.g. site.com/images/logo.png) is a direct image;
+  // a bare domain or site root (megamarket.ua, https://megamarket.ua/) is
+  // the company's website — set it as the domain and let the logo chain run.
+  const noProto = raw.replace(/^[a-z]+:\/\//i, "");
+  const slash = noProto.indexOf("/");
+  const hasPath = slash !== -1 && noProto.slice(slash + 1).length > 0;
+  if (raw.indexOf("data:") === 0 || hasPath) {
+    activeLogoBox.setValue(raw);
+  } else {
+    activeLogoBox.setDomain(normalizeDomain(raw));
+    activeLogoBox.setValue(null); // clear custom so the domain chain is used
+  }
   closeLogoChooser();
 });
 
@@ -915,6 +937,9 @@ const addLogoBox = createLogoBox(
   document.getElementById("add-logo-box"),
   () => cardNameInput.value,
   () => domainFromInput(cardDomainInput),
+  (d) => {
+    cardDomainInput.value = d;
+  },
   openLogoChooser
 );
 
@@ -1038,6 +1063,9 @@ const editLogoBox = createLogoBox(
   document.getElementById("edit-logo-box"),
   () => editNameInput.value,
   () => domainFromInput(editDomainInput),
+  (d) => {
+    editDomainInput.value = d;
+  },
   openLogoChooser
 );
 
