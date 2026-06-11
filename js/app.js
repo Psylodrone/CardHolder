@@ -19,7 +19,7 @@ function guessFormat(code) {
   return "CODE_128";
 }
 
-const views = ["view-home", "view-scan", "view-detail"];
+const views = ["view-home", "view-scan", "view-detail", "view-edit"];
 const headerTitle = document.getElementById("header-title");
 const backBtn = document.getElementById("back-btn");
 const addBtn = document.getElementById("add-btn");
@@ -106,7 +106,9 @@ function loadBestLogo(img, candidates, onFail) {
   };
   img.onerror = next;
   img.onload = () => {
-    if (img.naturalWidth && img.naturalWidth <= 16) next();
+    // Advance if the image didn't really decode (0 width, e.g. an empty
+    // 200 response) or is a tiny placeholder globe (<=16px)
+    if (!img.naturalWidth || img.naturalWidth <= 16) next();
   };
   img.src = candidates[0];
 }
@@ -396,73 +398,99 @@ cardCodeInput.addEventListener("input", () => {
 
 formatSelect.addEventListener("change", updatePreview);
 
-// --- Company search dropdown ---
+// --- Company search dropdown (reusable for add and edit forms) ---
 
-let domainManualMode = false;
-let domainDebounce = null;
-let domainFetchCtrl = null;
+function wireCompanySearch(input, dropdown, nameInput) {
+  let manualMode = false;
+  let debounce = null;
+  let ctrl = null;
 
-function hideDomainDropdown() {
-  domainDropdown.hidden = true;
-  domainDropdown.innerHTML = "";
-}
+  function hide() {
+    dropdown.hidden = true;
+    dropdown.innerHTML = "";
+  }
 
-function resetDomainField() {
-  cardDomainInput.value = "";
-  cardDomainInput.placeholder = "Search company…";
-  cardLogoInput.value = "";
-  domainManualMode = false;
-  hideDomainDropdown();
-}
+  function render(matches) {
+    dropdown.innerHTML = "";
 
-function renderDomainDropdown(matches) {
-  domainDropdown.innerHTML = "";
+    matches.slice(0, 5).forEach((m) => {
+      const item = document.createElement("div");
+      item.className = "dropdown-item";
 
-  matches.slice(0, 5).forEach((m) => {
-    const item = document.createElement("div");
-    item.className = "dropdown-item";
+      const img = document.createElement("img");
+      img.alt = "";
+      loadBestLogo(img, logoCandidates(m.domain), () => img.remove());
+      item.appendChild(img);
 
-    const img = document.createElement("img");
-    img.alt = "";
-    loadBestLogo(img, logoCandidates(m.domain), () => img.remove());
-    item.appendChild(img);
+      const text = document.createElement("div");
+      const nameEl = document.createElement("div");
+      nameEl.className = "dd-name";
+      nameEl.textContent = m.name;
+      const domainEl = document.createElement("div");
+      domainEl.className = "dd-domain";
+      domainEl.textContent = m.domain;
+      text.appendChild(nameEl);
+      text.appendChild(domainEl);
+      item.appendChild(text);
 
-    const text = document.createElement("div");
-    const nameEl = document.createElement("div");
-    nameEl.className = "dd-name";
-    nameEl.textContent = m.name;
-    const domainEl = document.createElement("div");
-    domainEl.className = "dd-domain";
-    domainEl.textContent = m.domain;
-    text.appendChild(nameEl);
-    text.appendChild(domainEl);
-    item.appendChild(text);
-
-    // pointerdown fires before the input's blur, so the tap registers
-    item.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      cardDomainInput.value = m.domain;
-      // Auto-fill the card name from the company, unless one's already set
-      if (!cardNameInput.value.trim()) cardNameInput.value = m.name;
-      hideDomainDropdown();
+      // pointerdown fires before the input's blur, so the tap registers
+      item.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        input.value = m.domain;
+        // Auto-fill the card name from the company, unless one's already set
+        if (nameInput && !nameInput.value.trim()) nameInput.value = m.name;
+        hide();
+      });
+      dropdown.appendChild(item);
     });
-    domainDropdown.appendChild(item);
+
+    const manual = document.createElement("div");
+    manual.className = "dropdown-item dropdown-manual";
+    manual.textContent = "Type domain manually…";
+    manual.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      manualMode = true;
+      input.value = "";
+      input.placeholder = "e.g. tesco.com";
+      hide();
+      input.focus();
+    });
+    dropdown.appendChild(manual);
+
+    dropdown.hidden = false;
+  }
+
+  input.addEventListener("input", () => {
+    const q = input.value.trim();
+    if (q === "") manualMode = false;
+    if (manualMode || q.length < 2) {
+      hide();
+      return;
+    }
+    clearTimeout(debounce);
+    debounce = setTimeout(async () => {
+      try {
+        if (ctrl) ctrl.abort();
+        ctrl = new AbortController();
+        const matches = await fetchCompanySuggestions(q, ctrl.signal);
+        if (matches.length) render(matches);
+        else hide();
+      } catch (e) {
+        // aborted or offline — leave the dropdown closed
+      }
+    }, 300);
   });
 
-  const manual = document.createElement("div");
-  manual.className = "dropdown-item dropdown-manual";
-  manual.textContent = "Type domain manually…";
-  manual.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    domainManualMode = true;
-    cardDomainInput.value = "";
-    cardDomainInput.placeholder = "e.g. tesco.com";
-    hideDomainDropdown();
-    cardDomainInput.focus();
-  });
-  domainDropdown.appendChild(manual);
+  input.addEventListener("blur", () => setTimeout(hide, 150));
 
-  domainDropdown.hidden = false;
+  return {
+    reset() {
+      manualMode = false;
+      input.value = "";
+      input.placeholder = "Search company…";
+      hide();
+    },
+  };
 }
 
 function hasCyrillic(s) {
@@ -544,28 +572,12 @@ async function fetchCompanySuggestions(q, signal) {
   return merged;
 }
 
-cardDomainInput.addEventListener("input", () => {
-  const q = cardDomainInput.value.trim();
-  if (q === "") domainManualMode = false;
-  if (domainManualMode || q.length < 2) {
-    hideDomainDropdown();
-    return;
-  }
-  clearTimeout(domainDebounce);
-  domainDebounce = setTimeout(async () => {
-    try {
-      if (domainFetchCtrl) domainFetchCtrl.abort();
-      domainFetchCtrl = new AbortController();
-      const matches = await fetchCompanySuggestions(q, domainFetchCtrl.signal);
-      if (matches.length) renderDomainDropdown(matches);
-      else hideDomainDropdown();
-    } catch (e) {
-      // aborted or offline — just leave the dropdown closed
-    }
-  }, 300);
-});
+const addSearch = wireCompanySearch(cardDomainInput, domainDropdown, cardNameInput);
 
-cardDomainInput.addEventListener("blur", () => setTimeout(hideDomainDropdown, 150));
+function resetDomainField() {
+  addSearch.reset();
+  cardLogoInput.value = "";
+}
 
 photoBtn.addEventListener("click", () => photoInput.click());
 
@@ -656,6 +668,81 @@ document.getElementById("delete-card-btn").addEventListener("click", () => {
   cards = cards.filter((c) => c.id !== selectedCardId);
   saveCards(cards);
   selectedCardId = null;
+
+  showView("view-home", "CardHolder");
+  renderCardList();
+});
+
+// --- Edit card ---
+
+const editDomainInput = document.getElementById("edit-domain-input");
+const editDropdown = document.getElementById("edit-dropdown");
+const editNameInput = document.getElementById("edit-name-input");
+const editLogoInput = document.getElementById("edit-logo-input");
+const editCodeInput = document.getElementById("edit-code-input");
+const editFormatSelect = document.getElementById("edit-format-select");
+const editPreviewField = document.getElementById("edit-preview-field");
+const editPreviewEl = document.getElementById("edit-preview");
+
+const editSearch = wireCompanySearch(editDomainInput, editDropdown, editNameInput);
+
+function updateEditPreview() {
+  const code = editCodeInput.value.trim();
+  if (!code) {
+    editPreviewField.hidden = true;
+    return;
+  }
+  editPreviewField.hidden = false;
+  renderBarcode(editPreviewEl, code, editFormatSelect.value);
+}
+
+editCodeInput.addEventListener("input", updateEditPreview);
+editFormatSelect.addEventListener("change", updateEditPreview);
+
+function openEdit(id) {
+  const card = loadCards().find((c) => c.id === id);
+  if (!card) return;
+  selectedCardId = id;
+
+  editSearch.reset();
+  editDomainInput.value = card.domain || "";
+  editNameInput.value = card.name;
+  editLogoInput.value = card.logo || "";
+  editCodeInput.value = card.code;
+  editFormatSelect.value = FORMAT_MAP[card.format] ? card.format : "CODE_128";
+  editDropdown.hidden = true;
+  updateEditPreview();
+
+  showView("view-edit", "Edit card");
+}
+
+document.getElementById("edit-card-btn").addEventListener("click", () => {
+  if (selectedCardId) openEdit(selectedCardId);
+});
+
+document.getElementById("edit-save-btn").addEventListener("click", () => {
+  const code = editCodeInput.value.trim();
+  if (!code) {
+    alert("Card code can't be empty.");
+    return;
+  }
+  const cards = loadCards();
+  const card = cards.find((c) => c.id === selectedCardId);
+  if (!card) return;
+
+  const typed = normalizeDomain(editDomainInput.value);
+  const newDomain = typed.includes(".") ? typed : null;
+  const newLogo = editLogoInput.value.trim() || null;
+
+  // If the logo source changed, drop the cached color so it recomputes
+  if (newDomain !== card.domain || newLogo !== card.logo) delete card.bg;
+
+  card.name = editNameInput.value.trim() || "Untitled card";
+  card.domain = newDomain;
+  card.logo = newLogo;
+  card.code = code;
+  card.format = editFormatSelect.value;
+  saveCards(cards);
 
   showView("view-home", "CardHolder");
   renderCardList();
