@@ -182,7 +182,9 @@ function extractLogoColor(src) {
       }
     };
     img.onerror = () => resolve(null);
-    img.src = src;
+    // Distinct cache key so this crossOrigin probe never shares a cache
+    // entry with the plain <img> that displays the same logo.
+    img.src = src + (src.includes("?") ? "&" : "?") + "ch_color=1";
   });
 }
 
@@ -274,8 +276,11 @@ function renderCardList() {
     // If we haven't already cached a color, derive it from the logo.
     // icon.horse is CORS-enabled, so its pixels are readable (unlike the
     // apple-touch-icon / Google favicon sources).
+    // Prefer icon.horse (CORS-enabled) for color so we never probe the
+    // displayed logo URL with crossOrigin — that would fail for non-CORS
+    // hosts and poison the image cache, breaking the visible logo.
     const domain = card.domain || guessDomain(card.name);
-    const colorSrc = card.logo || (domain && iconHorseUrl(domain));
+    const colorSrc = (domain && iconHorseUrl(domain)) || card.logo;
     if (!card.bg && colorSrc) {
       extractLogoColor(colorSrc).then((color) => {
         if (color) {
