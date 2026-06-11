@@ -207,7 +207,8 @@ renderCardList();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("service-worker.js")
+      .register("service-worker.js", { updateViaCache: "none" })
+      .then((reg) => reg.update())
       .catch((err) => console.warn("SW registration failed", err));
   });
 }
