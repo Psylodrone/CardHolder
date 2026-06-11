@@ -27,6 +27,7 @@ const readerEl = document.getElementById("reader");
 const scanResultEl = document.getElementById("scan-result");
 const cardNameInput = document.getElementById("card-name-input");
 const cardDomainInput = document.getElementById("card-domain-input");
+const domainDropdown = document.getElementById("domain-dropdown");
 const cardCodeInput = document.getElementById("card-code-input");
 const manualBtn = document.getElementById("manual-btn");
 const formatField = document.getElementById("format-field");
@@ -208,7 +209,7 @@ function startScan() {
     cardCodeInput.value = decodedText;
     scanResultEl.dataset.format = formatName;
     cardNameInput.value = "";
-    cardDomainInput.value = "";
+    resetDomainField();
     scanResultEl.hidden = false;
     updatePreview();
     cardNameInput.focus();
@@ -223,7 +224,7 @@ function startManualEntry() {
   manualBtn.hidden = true;
   photoBtn.hidden = true;
   cardNameInput.value = "";
-  cardDomainInput.value = "";
+  resetDomainField();
   cardCodeInput.value = "";
   formatSelect.value = "CODE_128";
   formatField.hidden = false;
@@ -274,6 +275,98 @@ cardCodeInput.addEventListener("input", () => {
 
 formatSelect.addEventListener("change", updatePreview);
 
+// --- Company search dropdown ---
+
+let domainManualMode = false;
+let domainDebounce = null;
+let domainFetchCtrl = null;
+
+function hideDomainDropdown() {
+  domainDropdown.hidden = true;
+  domainDropdown.innerHTML = "";
+}
+
+function resetDomainField() {
+  cardDomainInput.value = "";
+  cardDomainInput.placeholder = "Search company…";
+  domainManualMode = false;
+  hideDomainDropdown();
+}
+
+function renderDomainDropdown(matches) {
+  domainDropdown.innerHTML = "";
+
+  matches.slice(0, 5).forEach((m) => {
+    const item = document.createElement("div");
+    item.className = "dropdown-item";
+
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = "https://icons.duckduckgo.com/ip3/" + encodeURIComponent(m.domain) + ".ico";
+    img.onerror = () => img.remove();
+    item.appendChild(img);
+
+    const text = document.createElement("div");
+    const nameEl = document.createElement("div");
+    nameEl.className = "dd-name";
+    nameEl.textContent = m.name;
+    const domainEl = document.createElement("div");
+    domainEl.className = "dd-domain";
+    domainEl.textContent = m.domain;
+    text.appendChild(nameEl);
+    text.appendChild(domainEl);
+    item.appendChild(text);
+
+    // pointerdown fires before the input's blur, so the tap registers
+    item.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      cardDomainInput.value = m.domain;
+      hideDomainDropdown();
+    });
+    domainDropdown.appendChild(item);
+  });
+
+  const manual = document.createElement("div");
+  manual.className = "dropdown-item dropdown-manual";
+  manual.textContent = "Type domain manually…";
+  manual.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    domainManualMode = true;
+    cardDomainInput.value = "";
+    cardDomainInput.placeholder = "e.g. tesco.com";
+    hideDomainDropdown();
+    cardDomainInput.focus();
+  });
+  domainDropdown.appendChild(manual);
+
+  domainDropdown.hidden = false;
+}
+
+cardDomainInput.addEventListener("input", () => {
+  const q = cardDomainInput.value.trim();
+  if (q === "") domainManualMode = false;
+  if (domainManualMode || q.length < 2) {
+    hideDomainDropdown();
+    return;
+  }
+  clearTimeout(domainDebounce);
+  domainDebounce = setTimeout(async () => {
+    try {
+      if (domainFetchCtrl) domainFetchCtrl.abort();
+      domainFetchCtrl = new AbortController();
+      const res = await fetch(
+        "https://autocomplete.clearbit.com/v1/companies/suggest?query=" + encodeURIComponent(q),
+        { signal: domainFetchCtrl.signal }
+      );
+      renderDomainDropdown(await res.json());
+    } catch (e) {
+      // aborted or offline — just leave the dropdown closed
+    }
+  }, 300);
+});
+
+cardDomainInput.addEventListener("blur", () => setTimeout(hideDomainDropdown, 150));
+
 photoBtn.addEventListener("click", () => photoInput.click());
 
 photoInput.addEventListener("change", () => {
@@ -288,7 +381,7 @@ photoInput.addEventListener("change", () => {
       photoBtn.hidden = true;
       cardCodeInput.value = text;
       cardNameInput.value = "";
-      cardDomainInput.value = "";
+      resetDomainField();
       if (format === "UNKNOWN") {
         formatSelect.value = guessFormat(text);
         formatField.hidden = false;
@@ -341,7 +434,10 @@ document.getElementById("save-card-btn").addEventListener("click", () => {
   }
   const format = formatField.hidden ? scanResultEl.dataset.format : formatSelect.value;
   const name = cardNameInput.value.trim() || "Untitled card";
-  const domain = normalizeDomain(cardDomainInput.value) || null;
+  // Only treat the field as a domain if it actually looks like one (has a
+  // dot). Free-text left over from searching falls back to the name guess.
+  const typed = normalizeDomain(cardDomainInput.value);
+  const domain = typed.includes(".") ? typed : null;
 
   const cards = loadCards();
   cards.push({ id: makeId(), name, code, format, domain });
