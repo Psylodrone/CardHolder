@@ -200,17 +200,31 @@ main {
   margin-top: 0;
 }
 
-.detail-card .barcode-wrap {
+.barcode-wrap {
   background: #fff;
   padding: 12px;
   border-radius: 8px;
+  text-align: center;
+}
+
+.detail-card .barcode-wrap {
   margin: 16px 0;
 }
 
-.detail-card .barcode-wrap svg,
-.detail-card .barcode-wrap canvas,
-.detail-card .barcode-wrap img {
+.barcode-wrap svg,
+.barcode-wrap canvas,
+.barcode-wrap img {
   max-width: 100%;
+}
+
+#preview-field .barcode-wrap {
+  border: 1px solid #d1d1d6;
+}
+
+.preview-error {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
 }
 
 .detail-card .code-value {

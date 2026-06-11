@@ -30,6 +30,8 @@ const cardCodeInput = document.getElementById("card-code-input");
 const manualBtn = document.getElementById("manual-btn");
 const formatField = document.getElementById("format-field");
 const formatSelect = document.getElementById("card-format-select");
+const previewField = document.getElementById("preview-field");
+const previewEl = document.getElementById("manual-preview");
 
 let selectedCardId = null;
 
@@ -139,6 +141,7 @@ function startScan() {
     scanResultEl.dataset.format = formatName;
     cardNameInput.value = "";
     scanResultEl.hidden = false;
+    updatePreview();
     cardNameInput.focus();
   }).catch((err) => {
     alert("Camera error: " + err);
@@ -154,14 +157,51 @@ function startManualEntry() {
   formatSelect.value = "CODE_128";
   formatField.hidden = false;
   scanResultEl.hidden = false;
+  updatePreview();
   cardNameInput.focus();
+}
+
+function currentFormat() {
+  return formatField.hidden ? scanResultEl.dataset.format : formatSelect.value;
+}
+
+function updatePreview() {
+  const code = cardCodeInput.value.trim();
+  if (!code) {
+    previewField.hidden = true;
+    return;
+  }
+  previewField.hidden = false;
+  const format = currentFormat();
+
+  if (format === "QR_CODE") {
+    renderBarcode(previewEl, code, format);
+    return;
+  }
+
+  previewEl.innerHTML = "";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  previewEl.appendChild(svg);
+  try {
+    JsBarcode(svg, code, {
+      format: mapFormat(format),
+      displayValue: false,
+      margin: 10,
+    });
+  } catch (e) {
+    previewEl.innerHTML =
+      '<p class="preview-error">This code isn\'t valid for the selected barcode type</p>';
+  }
 }
 
 cardCodeInput.addEventListener("input", () => {
   if (!formatField.hidden) {
     formatSelect.value = guessFormat(cardCodeInput.value.trim());
   }
+  updatePreview();
 });
+
+formatSelect.addEventListener("change", updatePreview);
 
 function openDetail(id) {
   const cards = loadCards();
