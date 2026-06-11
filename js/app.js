@@ -91,8 +91,10 @@ function logoCandidates(domain) {
 // that yields a real image (decodes and is >16px, so placeholder globes
 // are rejected). Falls through past a candidate as soon as it errors,
 // times out, or returns a placeholder — so one blocked/hung source can't
-// hold up the others. Calls onFail when nothing usable loads.
-function loadBestLogo(img, candidates, onFail) {
+// hold up the others. Calls onFail when nothing usable loads; if a slow
+// source finishes successfully AFTER that, onLateSuccess(src) lets the
+// caller swap the late-arriving logo in over the fallback.
+function loadBestLogo(img, candidates, onFail, onLateSuccess) {
   const n = candidates.length;
   if (!n) {
     onFail();
@@ -100,6 +102,7 @@ function loadBestLogo(img, candidates, onFail) {
   }
   const status = new Array(n).fill("pending"); // "pending" | "ok" | "fail"
   let committed = false;
+  let failedAll = false;
 
   const decide = () => {
     if (committed) return;
@@ -112,6 +115,7 @@ function loadBestLogo(img, candidates, onFail) {
       }
     }
     committed = true;
+    failedAll = true;
     onFail();
   };
 
@@ -124,9 +128,19 @@ function loadBestLogo(img, candidates, onFail) {
       status[k] = s;
       decide();
     };
-    probe.onload = () => mark(probe.naturalWidth > 16 ? "ok" : "fail");
+    probe.onload = () => {
+      const ok = probe.naturalWidth > 16;
+      // Slow networks: the timeout may have given up already — if this
+      // image turns out fine, upgrade the fallback instead of wasting it
+      if ((settled || committed) && ok && failedAll && onLateSuccess) {
+        failedAll = false;
+        onLateSuccess(src);
+        return;
+      }
+      mark(ok ? "ok" : "fail");
+    };
     probe.onerror = () => mark("fail");
-    setTimeout(() => mark("fail"), 2000); // don't wait forever on a hung source
+    setTimeout(() => mark("fail"), 8000); // give slow hosts a real chance
     probe.src = src;
   });
 }
@@ -356,8 +370,17 @@ function createLogoBox(boxEl, getName, getDomain, openChooser) {
     boxEl.style.setProperty("--logo-bg", rgbStr(fallbackColor(name || "?")));
     const span = document.createElement("span");
     span.className = "logo-box-letter";
-    span.textContent = (name[0] || "?").toUpperCase();
+    span.textContent = initialsFor(name);
     boxEl.appendChild(span);
+    badge();
+  }
+
+  function showCommitted(src) {
+    reset("has-image");
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = src;
+    boxEl.appendChild(img);
     badge();
   }
 
@@ -367,7 +390,9 @@ function createLogoBox(boxEl, getName, getDomain, openChooser) {
     img.alt = "";
     boxEl.appendChild(img);
     badge();
-    loadBestLogo(img, candidates, onFail);
+    // If a slow source succeeds after we've fallen back to the letter,
+    // upgrade to the real logo instead of discarding it
+    loadBestLogo(img, candidates, onFail, showCommitted);
   }
 
   function render() {
@@ -401,6 +426,13 @@ function createLogoBox(boxEl, getName, getDomain, openChooser) {
   return api;
 }
 
+// "Grand Petrol" -> "GP", "Tesco" -> "T" (first letter of up to two words)
+function initialsFor(name) {
+  const words = (name || "").trim().split(/\s+/).filter(Boolean);
+  const letters = words.slice(0, 2).map((w) => w[0].toUpperCase());
+  return letters.join("") || "?";
+}
+
 function makeThumb(card) {
   const wrap = document.createElement("div");
   wrap.className = "card-thumb";
@@ -410,8 +442,17 @@ function makeThumb(card) {
     const av = document.createElement("div");
     av.className = "card-avatar";
     av.style.background = rgbStr(card.bg || fallbackColor(card.name));
-    av.textContent = (card.name.trim()[0] || "?").toUpperCase();
+    av.textContent = initialsFor(card.name);
     wrap.appendChild(av);
+  };
+
+  const showLateLogo = (src) => {
+    wrap.innerHTML = "";
+    const img = document.createElement("img");
+    img.className = "card-logo";
+    img.alt = "";
+    img.src = src;
+    wrap.appendChild(img);
   };
 
   const domain = card.domain;
@@ -424,7 +465,7 @@ function makeThumb(card) {
     const img = document.createElement("img");
     img.className = "card-logo";
     img.alt = "";
-    loadBestLogo(img, candidates, showAvatar);
+    loadBestLogo(img, candidates, showAvatar, showLateLogo);
     wrap.appendChild(img);
   } else {
     showAvatar();
