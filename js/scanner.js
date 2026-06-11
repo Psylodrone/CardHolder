@@ -14,10 +14,17 @@ const Scanner = (() => {
         const height = Math.floor(Math.min(viewfinderHeight * 0.5, width * 0.5));
         return { width, height };
       },
+      // 2x zoom (where iOS allows it) magnifies small barcodes at full
+      // sensor resolution, so they can be scanned from focusable distance
+      defaultZoomValueIfSupported: 2,
       videoConstraints: {
         facingMode: "environment",
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
+        width: { ideal: 2560 },
+        height: { ideal: 1440 },
+      },
+      // Use the platform's native barcode detector when the browser has one
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true,
       },
     };
 
