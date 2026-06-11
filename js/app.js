@@ -75,12 +75,31 @@ function guessDomain(name) {
 }
 
 // Logo sources in order of quality: the site's own high-res
-// apple-touch-icon (180x180 by convention), then favicon service
+// apple-touch-icon (180x180 by convention), then Google's favicon service.
+// Google returns a 16x16 generic globe when a site has no icon, which we
+// detect by size (see loadBestLogo) and reject in favor of a letter avatar.
 function logoCandidates(domain) {
   return [
     "https://" + domain + "/apple-touch-icon.png",
-    "https://icons.duckduckgo.com/ip3/" + encodeURIComponent(domain) + ".ico",
+    "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(domain) + "&sz=128",
   ];
+}
+
+// Load the first candidate that yields a real logo. Rejects images that
+// fail to decode and the tiny placeholder globes (<=16px). Calls onFail
+// when nothing usable remains.
+function loadBestLogo(img, candidates, onFail) {
+  let i = 0;
+  const next = () => {
+    i += 1;
+    if (i < candidates.length) img.src = candidates[i];
+    else onFail();
+  };
+  img.onerror = next;
+  img.onload = () => {
+    if (img.naturalWidth && img.naturalWidth <= 16) next();
+  };
+  img.src = candidates[0];
 }
 
 function hslToRgb(h, s, l) {
@@ -181,20 +200,10 @@ function makeThumb(card) {
 
   const domain = card.domain || guessDomain(card.name);
   if (domain) {
-    const candidates = logoCandidates(domain);
-    let attempt = 0;
     const img = document.createElement("img");
     img.className = "card-logo";
     img.alt = "";
-    img.onerror = () => {
-      attempt += 1;
-      if (attempt < candidates.length) {
-        img.src = candidates[attempt];
-      } else {
-        showAvatar();
-      }
-    };
-    img.src = candidates[0];
+    loadBestLogo(img, logoCandidates(domain), showAvatar);
     wrap.appendChild(img);
   } else {
     showAvatar();
@@ -397,8 +406,7 @@ function renderDomainDropdown(matches) {
 
     const img = document.createElement("img");
     img.alt = "";
-    img.src = "https://icons.duckduckgo.com/ip3/" + encodeURIComponent(m.domain) + ".ico";
-    img.onerror = () => img.remove();
+    loadBestLogo(img, logoCandidates(m.domain), () => img.remove());
     item.appendChild(img);
 
     const text = document.createElement("div");
