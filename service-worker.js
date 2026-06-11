@@ -1,4 +1,4 @@
-const CACHE_NAME = "cardholder-v5";
+const CACHE_NAME = "cardholder-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -36,8 +36,10 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
+  // cache: "no-cache" forces revalidation with the server, bypassing
+  // GitHub Pages' 10-minute HTTP cache staleness
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: "no-cache" })
       .then((response) => {
         if (response.ok) {
           const clone = response.clone();
