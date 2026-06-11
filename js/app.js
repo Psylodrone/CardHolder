@@ -342,6 +342,85 @@ function renderDomainDropdown(matches) {
   domainDropdown.hidden = false;
 }
 
+function hasCyrillic(s) {
+  return /[Ѐ-ӿ]/.test(s);
+}
+
+// Source 1: Clearbit — strong for Western brands
+async function searchClearbit(q, signal) {
+  try {
+    const res = await fetch(
+      "https://autocomplete.clearbit.com/v1/companies/suggest?query=" + encodeURIComponent(q),
+      { signal }
+    );
+    const arr = await res.json();
+    return arr.map((c) => ({ name: c.name, domain: c.domain }));
+  } catch (e) {
+    return [];
+  }
+}
+
+// Source 2: Wikidata — multilingual (incl. Ukrainian), resolves a brand
+// to its official website (property P856)
+async function searchWikidata(q, signal) {
+  try {
+    const lang = hasCyrillic(q) ? "uk" : "en";
+    const sres = await fetch(
+      "https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&origin=*" +
+        "&limit=7&language=" + lang + "&uselang=" + lang +
+        "&search=" + encodeURIComponent(q),
+      { signal }
+    );
+    const hits = (await sres.json()).search || [];
+    if (!hits.length) return [];
+
+    const ids = hits.map((h) => h.id).join("|");
+    const eres = await fetch(
+      "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&origin=*" +
+        "&props=claims&ids=" + ids,
+      { signal }
+    );
+    const entities = (await eres.json()).entities || {};
+
+    const out = [];
+    for (const h of hits) {
+      const claims = entities[h.id] && entities[h.id].claims && entities[h.id].claims.P856;
+      if (!claims || !claims.length) continue;
+      let url;
+      try {
+        url = claims[0].mainsnak.datavalue.value;
+      } catch (e) {
+        continue;
+      }
+      const domain = normalizeDomain(url);
+      if (domain && domain.includes(".")) {
+        out.push({ name: h.label || (h.match && h.match.text) || q, domain });
+      }
+    }
+    return out;
+  } catch (e) {
+    return [];
+  }
+}
+
+// Run both sources in parallel, merge and dedupe by domain
+async function fetchCompanySuggestions(q, signal) {
+  const [clearbit, wikidata] = await Promise.all([
+    searchClearbit(q, signal),
+    searchWikidata(q, signal),
+  ]);
+  const seen = new Set();
+  const merged = [];
+  for (const item of [...clearbit, ...wikidata]) {
+    if (!item.domain) continue;
+    const key = item.domain.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
 cardDomainInput.addEventListener("input", () => {
   const q = cardDomainInput.value.trim();
   if (q === "") domainManualMode = false;
@@ -354,11 +433,9 @@ cardDomainInput.addEventListener("input", () => {
     try {
       if (domainFetchCtrl) domainFetchCtrl.abort();
       domainFetchCtrl = new AbortController();
-      const res = await fetch(
-        "https://autocomplete.clearbit.com/v1/companies/suggest?query=" + encodeURIComponent(q),
-        { signal: domainFetchCtrl.signal }
-      );
-      renderDomainDropdown(await res.json());
+      const matches = await fetchCompanySuggestions(q, domainFetchCtrl.signal);
+      if (matches.length) renderDomainDropdown(matches);
+      else hideDomainDropdown();
     } catch (e) {
       // aborted or offline — just leave the dropdown closed
     }
