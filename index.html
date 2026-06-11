@@ -17,7 +17,7 @@
     <header>
       <button id="back-btn" hidden aria-label="Back">&larr;</button>
       <h1 id="header-title">CardHolder</h1>
-      <span id="app-version">v4</span>
+      <span id="app-version">v5</span>
       <button id="add-btn" aria-label="Add card">+</button>
     </header>
 
@@ -43,6 +43,19 @@
           <div class="field">
             <label for="card-code-input">Card code</label>
             <input id="card-code-input" type="text" placeholder="Card number / code" />
+          </div>
+          <div class="field" id="format-field" hidden>
+            <label for="card-format-select">Barcode type</label>
+            <select id="card-format-select">
+              <option value="CODE_128">Code 128 (generic)</option>
+              <option value="EAN_13">EAN-13 (13 digits, common in EU)</option>
+              <option value="EAN_8">EAN-8 (8 digits)</option>
+              <option value="UPC_A">UPC-A (12 digits, common in US)</option>
+              <option value="ITF">ITF / Interleaved 2 of 5</option>
+              <option value="CODE_39">Code 39</option>
+              <option value="CODABAR">Codabar</option>
+              <option value="QR_CODE">QR code</option>
+            </select>
           </div>
           <button id="save-card-btn" class="btn btn-primary">Save card</button>
           <button id="rescan-btn" class="btn btn-secondary">Scan again</button>

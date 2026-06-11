@@ -8,8 +8,16 @@ const FORMAT_MAP = {
   CODE_128: "CODE128",
   CODE_39: "CODE39",
   CODABAR: "codabar",
-  ITF: "ITF14",
+  ITF: "ITF",
 };
+
+// Guess a likely format from the code so the picker starts on a sane default
+function guessFormat(code) {
+  if (/^\d{13}$/.test(code)) return "EAN_13";
+  if (/^\d{12}$/.test(code)) return "UPC_A";
+  if (/^\d{8}$/.test(code)) return "EAN_8";
+  return "CODE_128";
+}
 
 const views = ["view-home", "view-scan", "view-detail"];
 const headerTitle = document.getElementById("header-title");
@@ -20,6 +28,8 @@ const scanResultEl = document.getElementById("scan-result");
 const cardNameInput = document.getElementById("card-name-input");
 const cardCodeInput = document.getElementById("card-code-input");
 const manualBtn = document.getElementById("manual-btn");
+const formatField = document.getElementById("format-field");
+const formatSelect = document.getElementById("card-format-select");
 
 let selectedCardId = null;
 
@@ -119,6 +129,7 @@ function renderBarcode(container, code, format) {
 
 function startScan() {
   scanResultEl.hidden = true;
+  formatField.hidden = true;
   manualBtn.hidden = false;
   readerEl.hidden = false;
   readerEl.innerHTML = "";
@@ -138,12 +149,19 @@ function startManualEntry() {
   Scanner.stop();
   readerEl.hidden = true;
   manualBtn.hidden = true;
-  scanResultEl.dataset.format = "CODE_128";
   cardNameInput.value = "";
   cardCodeInput.value = "";
+  formatSelect.value = "CODE_128";
+  formatField.hidden = false;
   scanResultEl.hidden = false;
   cardNameInput.focus();
 }
+
+cardCodeInput.addEventListener("input", () => {
+  if (!formatField.hidden) {
+    formatSelect.value = guessFormat(cardCodeInput.value.trim());
+  }
+});
 
 function openDetail(id) {
   const cards = loadCards();
@@ -178,7 +196,7 @@ document.getElementById("save-card-btn").addEventListener("click", () => {
     alert("Card code can't be empty.");
     return;
   }
-  const format = scanResultEl.dataset.format;
+  const format = formatField.hidden ? scanResultEl.dataset.format : formatSelect.value;
   const name = cardNameInput.value.trim() || "Untitled card";
 
   const cards = loadCards();

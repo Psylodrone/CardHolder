@@ -148,12 +148,14 @@ main {
   margin-bottom: 6px;
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #d1d1d6;
   border-radius: 8px;
   font-size: 16px;
+  background: #fff;
 }
 
 .btn {
