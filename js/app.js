@@ -86,6 +86,36 @@ function logoCandidates(domain) {
   ];
 }
 
+function isIconHorse(src) {
+  return src.indexOf("https://icon.horse/") === 0;
+}
+
+// icon.horse serves a generated gray letter tile (HTTP 200) instead of
+// failing when it has no real icon — undetectable by size. It is CORS-
+// readable though, so reject its results that are fully grayscale.
+function looksLikeLetterTile(img) {
+  try {
+    const s = 16;
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = s;
+    const ctx = cv.getContext("2d");
+    ctx.drawImage(img, 0, 0, s, s);
+    const d = ctx.getImageData(0, 0, s, s).data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 50) continue;
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      if (Math.max(Math.abs(r - g), Math.abs(r - b), Math.abs(g - b)) > 14) {
+        return false; // found a colored pixel — looks like a real logo
+      }
+    }
+    return true; // fully grayscale — assume generated placeholder
+  } catch (e) {
+    // Pixels unreadable (tainted canvas from a cached non-CORS response):
+    // we can't rule the placeholder out, so don't trust it
+    return true;
+  }
+}
+
 // Probe every candidate in parallel and display the highest-priority one
 // that yields a real image (decodes and is >16px, so placeholder globes
 // are rejected). Falls through past a candidate as soon as it errors,
@@ -128,8 +158,12 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
       setTimeout(() => {
         candidates.forEach((src) => {
           const retry = new Image();
+          if (isIconHorse(src)) {
+            retry.crossOrigin = "anonymous";
+            src = src + (src.includes("?") ? "&" : "?") + "cors=1";
+          }
           retry.onload = () => {
-            if (retry.naturalWidth > 16 && failedAll) {
+            if (probeLooksReal(retry, src) && failedAll) {
               failedAll = false;
               onLateSuccess(retry);
             }
@@ -140,8 +174,20 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
     }
   };
 
+  const probeLooksReal = (probe, src) => {
+    if (probe.naturalWidth <= 16) return false; // placeholder globe
+    if (isIconHorse(src) && looksLikeLetterTile(probe)) return false;
+    return true;
+  };
+
   candidates.forEach((src, k) => {
     const probe = new Image();
+    if (isIconHorse(src)) {
+      probe.crossOrigin = "anonymous"; // enables the pixel check
+      // Own cache key: a cached non-CORS copy of the same URL would load
+      // tainted and make the pixel check impossible
+      src = src + (src.includes("?") ? "&" : "?") + "cors=1";
+    }
     probes[k] = probe;
     let settled = false;
     const mark = (s) => {
@@ -151,7 +197,7 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
       decide();
     };
     probe.onload = () => {
-      const ok = probe.naturalWidth > 16;
+      const ok = probeLooksReal(probe, src);
       // Slow networks: the timeout may have given up already — if this
       // image turns out fine, upgrade the fallback instead of wasting it
       if ((settled || committed) && ok && failedAll && onLateSuccess) {
@@ -298,7 +344,12 @@ function extractLogoColor(src) {
           r += cr; g += cg; b += cb; n++;
         }
         if (n === 0) return resolve(null);
-        resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) });
+        const avg = { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) };
+        // A gray result is likely a placeholder image (e.g. icon.horse's
+        // letter tile), not a brand color — better to use the fallback
+        const spread = Math.max(avg.r, avg.g, avg.b) - Math.min(avg.r, avg.g, avg.b);
+        if (spread < 12) return resolve(null);
+        resolve(avg);
       } catch (e) {
         resolve(null); // tainted canvas
       }
@@ -542,15 +593,12 @@ function renderCardList() {
     // If we haven't already cached a color, derive it from the logo.
     // icon.horse is CORS-enabled, so its pixels are readable (unlike the
     // apple-touch-icon / Google favicon sources).
-    // A user-picked image (data URL) is local and readable, so it's the
-    // best color source. Otherwise prefer icon.horse (CORS-enabled) so we
-    // never probe a non-CORS host URL with crossOrigin (which would fail
-    // and poison the image cache, breaking the visible logo).
+    // Prefer the card's own logo for color (it's what's displayed; data
+    // URLs and Wikimedia Commons are readable). icon.horse is only the
+    // fallback when there's nothing else — its placeholder tiles are
+    // rejected by the grayscale check in extractLogoColor.
     const domain = card.domain;
-    const isDataLogo = card.logo && card.logo.indexOf("data:") === 0;
-    const colorSrc = isDataLogo
-      ? card.logo
-      : (domain && iconHorseUrl(domain)) || card.logo;
+    const colorSrc = card.logo || (domain && iconHorseUrl(domain));
     if (!card.bg && colorSrc) {
       extractLogoColor(colorSrc).then((color) => {
         if (color) {
@@ -679,7 +727,9 @@ function wireCompanySearch(input, dropdown, nameInput, onChange) {
   let manualMode = false;
   let debounce = null;
   let ctrl = null;
-  const notify = () => onChange && onChange();
+  // onChange(match) — match is present when a company was picked from the
+  // list (it may carry the brand's own logo URL from Wikidata)
+  const notify = (match) => onChange && onChange(match);
 
   function hide() {
     dropdown.hidden = true;
@@ -725,7 +775,10 @@ function wireCompanySearch(input, dropdown, nameInput, onChange) {
 
       const img = document.createElement("img");
       img.alt = "";
-      loadBestLogo(img, logoCandidates(m.domain), () => img.remove());
+      const preview = m.logo
+        ? [m.logo].concat(logoCandidates(m.domain))
+        : logoCandidates(m.domain);
+      loadBestLogo(img, preview, () => img.remove());
       item.appendChild(img);
 
       const text = document.createElement("div");
@@ -746,7 +799,7 @@ function wireCompanySearch(input, dropdown, nameInput, onChange) {
         // Auto-fill the card name from the company, unless one's already set
         if (nameInput && !nameInput.value.trim()) nameInput.value = m.name;
         hide();
-        notify();
+        notify(m);
       });
       dropdown.appendChild(item);
     });
@@ -843,18 +896,30 @@ async function searchWikidata(q, signal) {
 
     const out = [];
     for (const h of hits) {
-      const claims = entities[h.id] && entities[h.id].claims && entities[h.id].claims.P856;
-      if (!claims || !claims.length) continue;
+      const claims = (entities[h.id] && entities[h.id].claims) || {};
+      const site = claims.P856;
+      if (!site || !site.length) continue;
       let url;
       try {
-        url = claims[0].mainsnak.datavalue.value;
+        url = site[0].mainsnak.datavalue.value;
       } catch (e) {
         continue;
       }
       const domain = normalizeDomain(url);
-      if (domain && domain.includes(".")) {
-        out.push({ name: h.label || (h.match && h.match.text) || q, domain });
+      if (!domain || !domain.includes(".")) continue;
+
+      // P154 = the brand's actual logo image, hosted on Wikimedia Commons
+      let logo = null;
+      try {
+        const file = claims.P154[0].mainsnak.datavalue.value;
+        logo =
+          "https://commons.wikimedia.org/wiki/Special:FilePath/" +
+          encodeURIComponent(file) + "?width=256";
+      } catch (e) {
+        // no logo on record — domain-based lookup will be used instead
       }
+
+      out.push({ name: h.label || (h.match && h.match.text) || q, domain, logo });
     }
     return out;
   } catch (e) {
@@ -972,7 +1037,10 @@ const addSearch = wireCompanySearch(
   cardDomainInput,
   domainDropdown,
   cardNameInput,
-  () => addLogoBox.refresh()
+  (match) => {
+    if (match && match.logo) addLogoBox.setValue(match.logo);
+    else addLogoBox.refresh();
+  }
 );
 
 function resetDomainField() {
@@ -1098,7 +1166,10 @@ const editSearch = wireCompanySearch(
   editDomainInput,
   editDropdown,
   editNameInput,
-  () => editLogoBox.refresh()
+  (match) => {
+    if (match && match.logo) editLogoBox.setValue(match.logo);
+    else editLogoBox.refresh();
+  }
 );
 
 const editDiagBtn = document.getElementById("edit-diag-btn");
