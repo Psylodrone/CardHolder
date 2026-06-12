@@ -596,6 +596,9 @@ function makeThumb(card) {
   if (domain) candidates.push(...logoCandidates(domain));
 
   if (candidates.length) {
+    // Warm the Wikidata lookup in parallel — if all sources fail, the
+    // answer is already in hand instead of starting a fresh round-trip
+    if (domain && !card.logo) wikidataLogoForDomain(domain);
     const img = document.createElement("img");
     img.className = "card-logo";
     img.alt = "";
