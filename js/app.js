@@ -121,9 +121,10 @@ function looksLikeLetterTile(img) {
 // are rejected). Falls through past a candidate as soon as it errors,
 // times out, or returns a placeholder — so one blocked/hung source can't
 // hold up the others. Calls onFail when nothing usable loads; if a slow
-// source finishes successfully AFTER that, onLateSuccess(src) lets the
-// caller swap the late-arriving logo in over the fallback.
-function loadBestLogo(img, candidates, onFail, onLateSuccess) {
+// source finishes successfully AFTER that, onLateSuccess(probe, src) lets
+// the caller swap the late-arriving logo in over the fallback. onShown
+// fires whenever a logo is committed, with the element and original URL.
+function loadBestLogo(img, candidates, onFail, onLateSuccess, onShown) {
   const n = candidates.length;
   if (!n) {
     onFail();
@@ -146,6 +147,7 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
         probes[k].className = img.className;
         probes[k].alt = "";
         if (img.parentNode) img.replaceWith(probes[k]);
+        if (onShown) onShown(probes[k], candidates[k]);
         return;
       }
     }
@@ -156,7 +158,8 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
     // and succeed the next — re-probe once and upgrade if anything loads
     if (onLateSuccess) {
       setTimeout(() => {
-        candidates.forEach((src) => {
+        candidates.forEach((origSrc) => {
+          let src = origSrc;
           const retry = new Image();
           if (isIconHorse(src)) {
             retry.crossOrigin = "anonymous";
@@ -165,7 +168,7 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
           retry.onload = () => {
             if (probeLooksReal(retry, src) && failedAll) {
               failedAll = false;
-              onLateSuccess(retry);
+              onLateSuccess(retry, origSrc);
             }
           };
           retry.src = src;
@@ -202,7 +205,7 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
       // image turns out fine, upgrade the fallback instead of wasting it
       if ((settled || committed) && ok && failedAll && onLateSuccess) {
         failedAll = false;
-        onLateSuccess(probe);
+        onLateSuccess(probe, candidates[k]);
         return;
       }
       mark(ok ? "ok" : "fail");
@@ -251,6 +254,81 @@ function persistCardLogo(id, logo) {
     card.logo = logo;
     saveCards(cards);
   }
+}
+
+// Once a logo is confirmed on a card, snapshot it into a small data URL
+// stored with the card — future loads need no network at all. Only
+// possible when the host permits pixel access (icon.horse, Wikimedia
+// Commons, picked photos); otherwise the URL keeps being used.
+function snapshotToCard(cardId, probe, src) {
+  if (!src || src.indexOf("data:") === 0) return;
+
+  const save = (dataUrl) => {
+    const cards = loadCards();
+    const c = cards.find((x) => x.id === cardId);
+    // never overwrite an existing local image
+    if (c && (!c.logo || c.logo.indexOf("data:") !== 0)) {
+      c.logo = dataUrl;
+      saveCards(cards);
+    }
+  };
+
+  const snapshot = (imgEl) => {
+    const max = 128;
+    const w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+    const scale = Math.min(1, max / Math.max(w, h));
+    const cv = document.createElement("canvas");
+    cv.width = Math.max(1, Math.round(w * scale));
+    cv.height = Math.max(1, Math.round(h * scale));
+    cv.getContext("2d").drawImage(imgEl, 0, 0, cv.width, cv.height);
+    return cv.toDataURL("image/png"); // throws if the canvas is tainted
+  };
+
+  const retryWith = (url) => {
+    const retry = new Image();
+    retry.crossOrigin = "anonymous";
+    retry.onload = () => {
+      try {
+        save(snapshot(retry));
+      } catch (e) {
+        // host doesn't permit pixel access — keep using the URL
+      }
+    };
+    retry.src = url;
+  };
+
+  try {
+    save(snapshot(probe));
+  } catch (e) {
+    // Probe was loaded without CORS — retry once as a CORS request.
+    // Commons FilePath URLs redirect without CORS headers, so resolve
+    // the direct file URL via the Commons API first.
+    if (src.includes("Special:FilePath")) {
+      commonsDirectUrl(src).then((u) => {
+        if (u) retryWith(u);
+      });
+    } else {
+      // own cache key so it can't collide with the non-CORS cached copy
+      retryWith(src + (src.includes("?") ? "&" : "?") + "snap=1");
+    }
+  }
+}
+
+// Resolve a Commons Special:FilePath URL to its direct thumb URL — the
+// FilePath redirect chain lacks CORS headers, so CORS loads fail on it
+function commonsDirectUrl(src) {
+  const m = src.match(/Special:FilePath\/([^?]+)/);
+  if (!m) return Promise.resolve(null);
+  const api =
+    "https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*" +
+    "&prop=imageinfo&iiprop=url&iiurlwidth=256&titles=File:" + m[1];
+  return fetch(api)
+    .then((r) => r.json())
+    .then((d) => {
+      const page = d.query.pages[Object.keys(d.query.pages)[0]];
+      return page.imageinfo[0].thumburl || page.imageinfo[0].url;
+    })
+    .catch(() => null);
 }
 
 // --- Logo diagnostics (debug) ---
@@ -578,11 +656,14 @@ function makeThumb(card) {
     if (domain && !card.logo) {
       wikidataLogoForDomain(domain).then((logo) => {
         if (!logo) return;
+        // Plain load for display (FilePath redirects reject CORS loads);
+        // snapshotToCard resolves the direct URL for the local copy
         const img = new Image();
         img.onload = () => {
           if (img.naturalWidth > 16) {
             showLateLogo(img);
             persistCardLogo(card.id, logo);
+            snapshotToCard(card.id, img, logo);
           }
         };
         img.src = logo;
@@ -602,7 +683,16 @@ function makeThumb(card) {
     const img = document.createElement("img");
     img.className = "card-logo";
     img.alt = "";
-    loadBestLogo(img, candidates, onAllFailed, showLateLogo);
+    loadBestLogo(
+      img,
+      candidates,
+      onAllFailed,
+      (probe, src) => {
+        showLateLogo(probe);
+        snapshotToCard(card.id, probe, src);
+      },
+      (probe, src) => snapshotToCard(card.id, probe, src)
+    );
     wrap.appendChild(img);
   } else {
     showAvatar();
