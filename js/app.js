@@ -104,13 +104,19 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
   let committed = false;
   let failedAll = false;
 
+  const probes = new Array(n);
+
   const decide = () => {
     if (committed) return;
     for (let k = 0; k < n; k++) {
       if (status[k] === "pending") return; // wait for a higher priority result
       if (status[k] === "ok") {
         committed = true;
-        img.src = candidates[k]; // already in cache from the probe
+        // Swap the already-decoded probe in instead of re-requesting the
+        // URL — flaky hosts can fail a second fetch, leaving a broken icon
+        probes[k].className = img.className;
+        probes[k].alt = "";
+        if (img.parentNode) img.replaceWith(probes[k]);
         return;
       }
     }
@@ -121,6 +127,7 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
 
   candidates.forEach((src, k) => {
     const probe = new Image();
+    probes[k] = probe;
     let settled = false;
     const mark = (s) => {
       if (settled || committed) return;
@@ -134,7 +141,7 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
       // image turns out fine, upgrade the fallback instead of wasting it
       if ((settled || committed) && ok && failedAll && onLateSuccess) {
         failedAll = false;
-        onLateSuccess(src);
+        onLateSuccess(probe);
         return;
       }
       mark(ok ? "ok" : "fail");
@@ -377,12 +384,10 @@ function createLogoBox(boxEl, getName, getDomain, setDomain, openChooser) {
     badge();
   }
 
-  function showCommitted(src) {
+  function showCommitted(probeImg) {
     reset("has-image");
-    const img = document.createElement("img");
-    img.alt = "";
-    img.src = src;
-    boxEl.appendChild(img);
+    probeImg.alt = "";
+    boxEl.appendChild(probeImg);
     badge();
   }
 
@@ -418,6 +423,7 @@ function createLogoBox(boxEl, getName, getDomain, setDomain, openChooser) {
   const api = {
     refresh: render,
     setDomain,
+    getDomain,
     getValue() {
       return custom;
     },
@@ -449,13 +455,11 @@ function makeThumb(card) {
     wrap.appendChild(av);
   };
 
-  const showLateLogo = (src) => {
+  const showLateLogo = (probeImg) => {
     wrap.innerHTML = "";
-    const img = document.createElement("img");
-    img.className = "card-logo";
-    img.alt = "";
-    img.src = src;
-    wrap.appendChild(img);
+    probeImg.className = "card-logo";
+    probeImg.alt = "";
+    wrap.appendChild(probeImg);
   };
 
   const domain = card.domain;
@@ -878,7 +882,13 @@ function domainFromInput(input) {
 function openLogoChooser(box) {
   activeLogoBox = box;
   const v = box.getValue();
-  lmUrl.value = v && v.indexOf("data:") !== 0 ? v : "";
+  if (v && v.indexOf("data:") !== 0) {
+    lmUrl.value = v; // direct image URL currently in use
+  } else if (!v && box.getDomain()) {
+    lmUrl.value = box.getDomain(); // logo comes from the company website
+  } else {
+    lmUrl.value = ""; // picked photo (data URL) or nothing set
+  }
   logoModal.hidden = false;
 }
 
