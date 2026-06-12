@@ -72,16 +72,15 @@ function iconHorseUrl(domain) {
   return "https://icon.horse/icon/" + encodeURIComponent(domain);
 }
 
-// Logo sources, in priority order. Multiple services are listed because
-// any one of them can be blocked/unreachable on a given network (e.g.
-// Google's favicon service doesn't load on some connections while
-// DuckDuckGo does). loadBestLogo tries them all at once and picks the
-// best that actually loads.
+// Logo sources, in priority order. loadBestLogo probes them all at once
+// and shows the highest-priority real result. DuckDuckGo is deliberately
+// NOT here: for unknown sites it serves a 48x48 generic placeholder that
+// is indistinguishable from a real favicon (unlike Google's 16px globe,
+// which the size check rejects), so it can mask better sources.
 function logoCandidates(domain) {
   const d = encodeURIComponent(domain);
   return [
     "https://" + domain + "/apple-touch-icon.png", // site's own high-res icon
-    "https://icons.duckduckgo.com/ip3/" + d + ".ico", // reliable on most networks
     "https://www.google.com/s2/favicons?domain=" + d + "&sz=128",
     iconHorseUrl(domain), // parses HTML for non-standard icon paths
   ];
@@ -182,7 +181,7 @@ async function diagnoseLogo(card) {
   const labelled = [];
   if (card.logo) labelled.push(["logo override", card.logo]);
   if (domain) {
-    const names = ["apple-touch-icon", "duckduckgo", "google-favicon", "icon.horse"];
+    const names = ["apple-touch-icon", "google-favicon", "icon.horse"];
     logoCandidates(domain).forEach((u, i) => labelled.push([names[i] || "source", u]));
   }
 
