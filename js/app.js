@@ -863,9 +863,24 @@ function renderPreviewBarcode(container, code, format) {
   }
 }
 
+// Formats this code can actually be rendered as — swiping skips the rest
+function validFormatsFor(code) {
+  return FORMAT_OPTIONS.filter((f) => {
+    if (f === "QR_CODE") return true; // QR encodes any text
+    try {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      JsBarcode(svg, code, { format: mapFormat(f), displayValue: false });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  });
+}
+
 // Swipeable barcode preview: shows the code in the current format with a
 // small type label below; swipe left/right on the barcode (or tap the
-// label) to cycle through types — replaces the old dropdown.
+// label) to cycle through the types valid for this code — replaces the
+// old dropdown.
 function wireFormatSwiper(fieldEl, wrapEl, labelEl, getCode) {
   let format = "CODE_128";
   let guessing = true; // until the user swipes, typing re-guesses the type
@@ -878,13 +893,20 @@ function wireFormatSwiper(fieldEl, wrapEl, labelEl, getCode) {
     }
     fieldEl.hidden = false;
     renderPreviewBarcode(wrapEl, code, format);
-    labelEl.textContent = (FORMAT_LABELS[format] || format) + "  ‹ swipe to change ›";
+    const name = FORMAT_LABELS[format] || format;
+    const swipeable = validFormatsFor(code).length > 1;
+    labelEl.textContent = swipeable ? name + "  ‹ swipe to change ›" : name;
   }
 
   function cycle(dir) {
+    const code = getCode().trim();
+    if (!code) return;
     guessing = false;
-    const i = FORMAT_OPTIONS.indexOf(format);
-    format = FORMAT_OPTIONS[(i + dir + FORMAT_OPTIONS.length) % FORMAT_OPTIONS.length];
+    const list = validFormatsFor(code);
+    const i = list.indexOf(format);
+    // if the current format isn't in the valid list, start from its edge
+    const next = i === -1 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length;
+    format = list[next];
     render();
   }
 
@@ -920,7 +942,12 @@ function wireFormatSwiper(fieldEl, wrapEl, labelEl, getCode) {
       render();
     },
     onCodeInput() {
-      if (guessing) format = guessFormat(getCode().trim());
+      if (guessing) {
+        const code = getCode().trim();
+        const list = validFormatsFor(code);
+        const guess = guessFormat(code);
+        format = list.includes(guess) ? guess : list[0] || "CODE_128";
+      }
       render();
     },
     refresh: render,
