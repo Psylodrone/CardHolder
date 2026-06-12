@@ -213,6 +213,46 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
   });
 }
 
+// Last-resort automatic lookup: ask Wikidata if a brand with this exact
+// official website has a registered logo (P154, hosted on Commons).
+// Covers brands whose sites expose no usable icon at all.
+const wdLogoCache = new Map(); // domain -> Promise<string|null>
+function wikidataLogoForDomain(domain) {
+  if (wdLogoCache.has(domain)) return wdLogoCache.get(domain);
+  const variants = [];
+  ["http://", "https://"].forEach((p) => {
+    ["", "www."].forEach((w) => {
+      variants.push("<" + p + w + domain + ">", "<" + p + w + domain + "/>");
+    });
+  });
+  const q =
+    "SELECT ?logo WHERE { VALUES ?site { " + variants.join(" ") + " } " +
+    "?e wdt:P856 ?site . ?e wdt:P154 ?logo } LIMIT 1";
+  const promise = fetch(
+    "https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(q)
+  )
+    .then((r) => r.json())
+    .then((d) => {
+      const b = d.results.bindings;
+      if (!b.length) return null;
+      // Commons FilePath URL; ask for a reasonably sized thumbnail
+      return b[0].logo.value.replace(/^http:/, "https:") + "?width=256";
+    })
+    .catch(() => null);
+  wdLogoCache.set(domain, promise);
+  return promise;
+}
+
+// Save an auto-discovered logo on the card so future loads are instant
+function persistCardLogo(id, logo) {
+  const cards = loadCards();
+  const card = cards.find((c) => c.id === id);
+  if (card && !card.logo) {
+    card.logo = logo;
+    saveCards(cards);
+  }
+}
+
 // --- Logo diagnostics (debug) ---
 
 // Probe one URL and report exactly what happened, the way an <img> sees it
@@ -529,6 +569,27 @@ function makeThumb(card) {
   };
 
   const domain = card.domain;
+
+  // When every source fails, fall back to letters — then quietly ask
+  // Wikidata whether this brand has a registered logo; if so, swap it in
+  // and save it on the card so future loads are instant.
+  const onAllFailed = () => {
+    showAvatar();
+    if (domain && !card.logo) {
+      wikidataLogoForDomain(domain).then((logo) => {
+        if (!logo) return;
+        const img = new Image();
+        img.onload = () => {
+          if (img.naturalWidth > 16) {
+            showLateLogo(img);
+            persistCardLogo(card.id, logo);
+          }
+        };
+        img.src = logo;
+      });
+    }
+  };
+
   // An explicit logo URL (user override) is tried before the auto sources
   const candidates = [];
   if (card.logo) candidates.push(card.logo);
@@ -538,7 +599,7 @@ function makeThumb(card) {
     const img = document.createElement("img");
     img.className = "card-logo";
     img.alt = "";
-    loadBestLogo(img, candidates, showAvatar, showLateLogo);
+    loadBestLogo(img, candidates, onAllFailed, showLateLogo);
     wrap.appendChild(img);
   } else {
     showAvatar();
