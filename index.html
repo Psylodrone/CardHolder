@@ -17,7 +17,7 @@
     <header>
       <button id="back-btn" hidden aria-label="Back">&larr;</button>
       <h1 id="header-title">CardHolder</h1>
-      <span id="app-version">v40</span>
+      <span id="app-version">v41</span>
       <button id="add-btn" aria-label="Add card">+</button>
     </header>
 
@@ -74,6 +74,7 @@
           </div>
           <button id="save-card-btn" class="btn btn-primary">Save card</button>
           <button id="rescan-btn" class="btn btn-secondary">Scan again</button>
+          <button type="button" id="add-cancel-btn" class="btn btn-secondary">Cancel</button>
         </div>
       </section>
 
@@ -84,7 +85,6 @@
           <div class="barcode-wrap" id="detail-barcode"></div>
           <p class="code-value" id="detail-value"></p>
           <button id="edit-card-btn" class="btn btn-secondary">Edit card</button>
-          <button id="delete-card-btn" class="btn btn-danger">Delete card</button>
         </div>
       </section>
 
@@ -126,6 +126,8 @@
             <div class="barcode-wrap" id="edit-preview"></div>
           </div>
           <button id="edit-save-btn" class="btn btn-primary">Save changes</button>
+          <button type="button" id="edit-cancel-btn" class="btn btn-secondary">Cancel</button>
+          <button id="delete-card-btn" class="btn btn-danger">Delete card</button>
           <button type="button" id="edit-diag-btn" class="btn btn-secondary">Diagnose logo (debug)</button>
           <textarea id="edit-diag-output" class="diag-output" readonly hidden></textarea>
         </div>

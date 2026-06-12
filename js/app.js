@@ -1259,6 +1259,11 @@ backBtn.addEventListener("click", () => {
 
 document.getElementById("rescan-btn").addEventListener("click", startScan);
 
+document.getElementById("add-cancel-btn").addEventListener("click", () => {
+  showView("view-home", "CardHolder");
+  renderCardList();
+});
+
 manualBtn.addEventListener("click", startManualEntry);
 
 document.getElementById("save-card-btn").addEventListener("click", () => {
@@ -1375,6 +1380,12 @@ function openEdit(id) {
 
 document.getElementById("edit-card-btn").addEventListener("click", () => {
   if (selectedCardId) openEdit(selectedCardId);
+});
+
+// Discard changes and return to the card (fields repopulate on next open)
+document.getElementById("edit-cancel-btn").addEventListener("click", () => {
+  if (selectedCardId) openDetail(selectedCardId);
+  else showView("view-home", "CardHolder");
 });
 
 document.getElementById("edit-save-btn").addEventListener("click", () => {
