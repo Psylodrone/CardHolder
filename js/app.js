@@ -122,6 +122,22 @@ function loadBestLogo(img, candidates, onFail, onLateSuccess) {
     committed = true;
     failedAll = true;
     onFail();
+    // Second chance: flaky services (icon.horse 504s) can fail one moment
+    // and succeed the next — re-probe once and upgrade if anything loads
+    if (onLateSuccess) {
+      setTimeout(() => {
+        candidates.forEach((src) => {
+          const retry = new Image();
+          retry.onload = () => {
+            if (retry.naturalWidth > 16 && failedAll) {
+              failedAll = false;
+              onLateSuccess(retry);
+            }
+          };
+          retry.src = src;
+        });
+      }, 5000);
+    }
   };
 
   candidates.forEach((src, k) => {
