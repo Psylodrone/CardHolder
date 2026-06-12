@@ -430,11 +430,14 @@ main {
   border: 1px solid #d1d1d6;
 }
 
-/* Swipeable barcode preview (swipe horizontally to change type) */
+/* Swipeable barcode preview (swipe horizontally to change type).
+   Fixed height so the frame never resizes while cycling formats. */
 .barcode-swipe {
+  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   touch-action: pan-y; /* horizontal swipes belong to the format cycler */
   -webkit-user-select: none;
   user-select: none;
@@ -444,6 +447,15 @@ main {
 .barcode-swipe svg {
   max-width: 100%;
   height: 100px;
+}
+
+.barcode-swipe canvas {
+  width: 140px !important;
+  height: 140px !important;
+}
+
+.empty-state {
+  cursor: pointer;
 }
 
 .format-label {

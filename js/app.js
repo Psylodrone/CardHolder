@@ -843,10 +843,26 @@ const FORMAT_LABELS = {
 };
 
 function renderPreviewBarcode(container, code, format) {
+  const showError = () => {
+    container.innerHTML =
+      '<p class="preview-error">This code isn\'t valid for the ' +
+      (FORMAT_LABELS[format] || format) + " barcode type</p>";
+  };
+
   if (format === "QR_CODE") {
-    renderBarcode(container, code, format);
+    try {
+      container.innerHTML = "";
+      const canvas = document.createElement("canvas");
+      container.appendChild(canvas);
+      QRCode.toCanvas(canvas, code, { width: 140 }, (err) => {
+        if (err) showError();
+      });
+    } catch (e) {
+      showError(); // e.g. the QR library failed to load
+    }
     return;
   }
+
   container.innerHTML = "";
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   container.appendChild(svg);
@@ -856,21 +872,21 @@ function renderPreviewBarcode(container, code, format) {
       displayValue: false,
       margin: 10,
     });
+    if (!svg.querySelector("rect")) showError(); // rendered nothing — treat as invalid
   } catch (e) {
-    container.innerHTML =
-      '<p class="preview-error">This code isn\'t valid for the ' +
-      (FORMAT_LABELS[format] || format) + " barcode type</p>";
+    showError();
   }
 }
 
 // Formats this code can actually be rendered as — swiping skips the rest
 function validFormatsFor(code) {
   return FORMAT_OPTIONS.filter((f) => {
-    if (f === "QR_CODE") return true; // QR encodes any text
+    // QR encodes any text, but only if its library actually loaded
+    if (f === "QR_CODE") return typeof QRCode !== "undefined";
     try {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       JsBarcode(svg, code, { format: mapFormat(f), displayValue: false });
-      return true;
+      return !!svg.querySelector("rect"); // must have produced actual bars
     } catch (e) {
       return false;
     }
@@ -1329,6 +1345,40 @@ function openDetail(id) {
 addBtn.addEventListener("click", () => {
   showView("view-scan", "Scan card");
   startScan();
+});
+
+// The first-launch hint works like the + button
+document.getElementById("empty-state").addEventListener("click", () => {
+  showView("view-scan", "Scan card");
+  startScan();
+});
+
+// Debug tools are hidden by default; triple-tap the version label to toggle
+const DEBUG_KEY = "cardholder.debug";
+const diagBtn = document.getElementById("edit-diag-btn");
+
+function applyDebugVisibility() {
+  diagBtn.hidden = localStorage.getItem(DEBUG_KEY) !== "1";
+}
+applyDebugVisibility();
+
+let versionTaps = [];
+document.getElementById("app-version").addEventListener("click", () => {
+  const now = Date.now();
+  versionTaps = versionTaps.filter((t) => now - t < 1500);
+  versionTaps.push(now);
+  if (versionTaps.length >= 3) {
+    versionTaps = [];
+    const on = localStorage.getItem(DEBUG_KEY) === "1";
+    localStorage.setItem(DEBUG_KEY, on ? "0" : "1");
+    applyDebugVisibility();
+    const label = document.getElementById("app-version");
+    const original = label.textContent;
+    label.textContent = on ? "debug off" : "debug on";
+    setTimeout(() => {
+      label.textContent = original;
+    }, 1200);
+  }
 });
 
 backBtn.addEventListener("click", () => {
