@@ -30,12 +30,11 @@ const cardDomainInput = document.getElementById("card-domain-input");
 const domainDropdown = document.getElementById("domain-dropdown");
 const cardCodeInput = document.getElementById("card-code-input");
 const manualBtn = document.getElementById("manual-btn");
-const formatField = document.getElementById("format-field");
-const formatSelect = document.getElementById("card-format-select");
 const photoBtn = document.getElementById("photo-btn");
 const photoInput = document.getElementById("photo-input");
 const previewField = document.getElementById("preview-field");
 const previewEl = document.getElementById("manual-preview");
+const formatLabelEl = document.getElementById("format-label");
 
 let selectedCardId = null;
 
@@ -799,7 +798,6 @@ function renderBarcode(container, code, format) {
 
 function startScan() {
   scanResultEl.hidden = true;
-  formatField.hidden = true;
   manualBtn.hidden = false;
   photoBtn.hidden = false;
   readerEl.hidden = false;
@@ -807,11 +805,10 @@ function startScan() {
   Scanner.start((decodedText, formatName) => {
     Scanner.stop();
     cardCodeInput.value = decodedText;
-    scanResultEl.dataset.format = formatName;
     cardNameInput.value = "";
     resetDomainField();
     scanResultEl.hidden = false;
-    updatePreview();
+    addFormatSwiper.setKnown(formatName);
     cardDomainInput.focus();
   }).catch((err) => {
     alert("Camera error: " + err);
@@ -826,34 +823,33 @@ function startManualEntry() {
   cardNameInput.value = "";
   resetDomainField();
   cardCodeInput.value = "";
-  formatSelect.value = "CODE_128";
-  formatField.hidden = false;
   scanResultEl.hidden = false;
-  updatePreview();
+  addFormatSwiper.reset("CODE_128");
   cardDomainInput.focus();
 }
 
-function currentFormat() {
-  return formatField.hidden ? scanResultEl.dataset.format : formatSelect.value;
-}
+const FORMAT_OPTIONS = [
+  "CODE_128", "EAN_13", "EAN_8", "UPC_A", "ITF", "CODE_39", "CODABAR", "QR_CODE",
+];
+const FORMAT_LABELS = {
+  CODE_128: "Code 128",
+  EAN_13: "EAN-13",
+  EAN_8: "EAN-8",
+  UPC_A: "UPC-A",
+  ITF: "ITF",
+  CODE_39: "Code 39",
+  CODABAR: "Codabar",
+  QR_CODE: "QR code",
+};
 
-function updatePreview() {
-  const code = cardCodeInput.value.trim();
-  if (!code) {
-    previewField.hidden = true;
-    return;
-  }
-  previewField.hidden = false;
-  const format = currentFormat();
-
+function renderPreviewBarcode(container, code, format) {
   if (format === "QR_CODE") {
-    renderBarcode(previewEl, code, format);
+    renderBarcode(container, code, format);
     return;
   }
-
-  previewEl.innerHTML = "";
+  container.innerHTML = "";
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  previewEl.appendChild(svg);
+  container.appendChild(svg);
   try {
     JsBarcode(svg, code, {
       format: mapFormat(format),
@@ -861,19 +857,81 @@ function updatePreview() {
       margin: 10,
     });
   } catch (e) {
-    previewEl.innerHTML =
-      '<p class="preview-error">This code isn\'t valid for the selected barcode type</p>';
+    container.innerHTML =
+      '<p class="preview-error">This code isn\'t valid for the ' +
+      (FORMAT_LABELS[format] || format) + " barcode type</p>";
   }
 }
 
-cardCodeInput.addEventListener("input", () => {
-  if (!formatField.hidden) {
-    formatSelect.value = guessFormat(cardCodeInput.value.trim());
-  }
-  updatePreview();
-});
+// Swipeable barcode preview: shows the code in the current format with a
+// small type label below; swipe left/right on the barcode (or tap the
+// label) to cycle through types — replaces the old dropdown.
+function wireFormatSwiper(fieldEl, wrapEl, labelEl, getCode) {
+  let format = "CODE_128";
+  let guessing = true; // until the user swipes, typing re-guesses the type
 
-formatSelect.addEventListener("change", updatePreview);
+  function render() {
+    const code = getCode().trim();
+    if (!code) {
+      fieldEl.hidden = true;
+      return;
+    }
+    fieldEl.hidden = false;
+    renderPreviewBarcode(wrapEl, code, format);
+    labelEl.textContent = (FORMAT_LABELS[format] || format) + "  ‹ swipe to change ›";
+  }
+
+  function cycle(dir) {
+    guessing = false;
+    const i = FORMAT_OPTIONS.indexOf(format);
+    format = FORMAT_OPTIONS[(i + dir + FORMAT_OPTIONS.length) % FORMAT_OPTIONS.length];
+    render();
+  }
+
+  let x0 = null;
+  wrapEl.addEventListener("pointerdown", (e) => {
+    x0 = e.clientX;
+  });
+  wrapEl.addEventListener("pointerup", (e) => {
+    if (x0 === null) return;
+    const dx = e.clientX - x0;
+    x0 = null;
+    if (Math.abs(dx) > 30) cycle(dx < 0 ? 1 : -1);
+  });
+  wrapEl.addEventListener("pointercancel", () => {
+    x0 = null;
+  });
+  labelEl.addEventListener("click", () => cycle(1)); // tap fallback
+
+  return {
+    get() {
+      return format;
+    },
+    // Format known for sure (scan result / saved card) — stop guessing
+    setKnown(f) {
+      format = f || "CODE_128";
+      guessing = false;
+      render();
+    },
+    // Start fresh with a guess; typing keeps re-guessing until a swipe
+    reset(f) {
+      format = f || "CODE_128";
+      guessing = true;
+      render();
+    },
+    onCodeInput() {
+      if (guessing) format = guessFormat(getCode().trim());
+      render();
+    },
+    refresh: render,
+  };
+}
+
+const addFormatSwiper = wireFormatSwiper(
+  previewField, previewEl, formatLabelEl, () => cardCodeInput.value
+);
+
+cardCodeInput.addEventListener("input", () => addFormatSwiper.onCodeInput());
 
 // --- Company search dropdown (reusable for add and edit forms) ---
 
@@ -1217,15 +1275,9 @@ photoInput.addEventListener("change", () => {
       cardCodeInput.value = text;
       cardNameInput.value = "";
       resetDomainField();
-      if (format === "UNKNOWN") {
-        formatSelect.value = guessFormat(text);
-        formatField.hidden = false;
-      } else {
-        scanResultEl.dataset.format = format;
-        formatField.hidden = true;
-      }
       scanResultEl.hidden = false;
-      updatePreview();
+      if (format === "UNKNOWN") addFormatSwiper.reset(guessFormat(text));
+      else addFormatSwiper.setKnown(format);
       cardDomainInput.focus();
     })
     .catch(() => {
@@ -1272,7 +1324,7 @@ document.getElementById("save-card-btn").addEventListener("click", () => {
     alert("Card code can't be empty.");
     return;
   }
-  const format = formatField.hidden ? scanResultEl.dataset.format : formatSelect.value;
+  const format = addFormatSwiper.get();
   const name = cardNameInput.value.trim() || "Untitled card";
   // Only treat the field as a domain if it actually looks like one (has a
   // dot). Free-text left over from searching falls back to the name guess.
@@ -1307,9 +1359,13 @@ const editDomainInput = document.getElementById("edit-domain-input");
 const editDropdown = document.getElementById("edit-dropdown");
 const editNameInput = document.getElementById("edit-name-input");
 const editCodeInput = document.getElementById("edit-code-input");
-const editFormatSelect = document.getElementById("edit-format-select");
 const editPreviewField = document.getElementById("edit-preview-field");
 const editPreviewEl = document.getElementById("edit-preview");
+const editFormatLabelEl = document.getElementById("edit-format-label");
+
+const editFormatSwiper = wireFormatSwiper(
+  editPreviewField, editPreviewEl, editFormatLabelEl, () => editCodeInput.value
+);
 
 const editLogoBox = createLogoBox(
   document.getElementById("edit-logo-box"),
@@ -1348,18 +1404,7 @@ editDiagBtn.addEventListener("click", async () => {
   editDiagOutput.value = await diagnoseLogo(probe);
 });
 
-function updateEditPreview() {
-  const code = editCodeInput.value.trim();
-  if (!code) {
-    editPreviewField.hidden = true;
-    return;
-  }
-  editPreviewField.hidden = false;
-  renderBarcode(editPreviewEl, code, editFormatSelect.value);
-}
-
-editCodeInput.addEventListener("input", updateEditPreview);
-editFormatSelect.addEventListener("change", updateEditPreview);
+editCodeInput.addEventListener("input", () => editFormatSwiper.refresh());
 
 function openEdit(id) {
   const card = loadCards().find((c) => c.id === id);
@@ -1371,9 +1416,8 @@ function openEdit(id) {
   editNameInput.value = card.name;
   editLogoBox.setValue(card.logo || null);
   editCodeInput.value = card.code;
-  editFormatSelect.value = FORMAT_MAP[card.format] ? card.format : "CODE_128";
   editDropdown.hidden = true;
-  updateEditPreview();
+  editFormatSwiper.setKnown(card.format);
 
   showView("view-edit", "Edit card");
 }
@@ -1409,7 +1453,7 @@ document.getElementById("edit-save-btn").addEventListener("click", () => {
   card.domain = newDomain;
   card.logo = newLogo;
   card.code = code;
-  card.format = editFormatSelect.value;
+  card.format = editFormatSwiper.get();
   saveCards(cards);
 
   showView("view-home", "CardHolder");

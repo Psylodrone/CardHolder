@@ -163,6 +163,10 @@ main {
   justify-content: center;
 }
 
+#reader[hidden] {
+  display: none;
+}
+
 #reader video {
   width: 100% !important;
   height: 100% !important;
@@ -421,8 +425,38 @@ main {
   max-width: 100%;
 }
 
-#preview-field .barcode-wrap {
+#preview-field .barcode-wrap,
+#edit-preview-field .barcode-wrap {
   border: 1px solid #d1d1d6;
+}
+
+/* Swipeable full-width preview */
+.barcode-swipe {
+  min-height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: pan-y; /* horizontal swipes belong to the format cycler */
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: ew-resize;
+}
+
+.barcode-swipe svg {
+  width: 100%;
+  height: 130px;
+}
+
+.barcode-swipe canvas {
+  width: 150px !important;
+  height: 150px !important;
+}
+
+.format-label {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .preview-error {
