@@ -23,6 +23,7 @@ const views = ["view-home", "view-scan", "view-detail", "view-edit"];
 const headerTitle = document.getElementById("header-title");
 const backBtn = document.getElementById("back-btn");
 const addBtn = document.getElementById("add-btn");
+const backupBtn = document.getElementById("backup-btn");
 const readerEl = document.getElementById("reader");
 const scanResultEl = document.getElementById("scan-result");
 const cardNameInput = document.getElementById("card-name-input");
@@ -706,6 +707,7 @@ function showView(id, title) {
   headerTitle.textContent = title;
   backBtn.hidden = id === "view-home";
   addBtn.hidden = id !== "view-home";
+  backupBtn.hidden = id !== "view-home";
 
   if (id !== "view-scan") {
     Scanner.stop();
@@ -1345,6 +1347,123 @@ function openDetail(id) {
 addBtn.addEventListener("click", () => {
   showView("view-scan", "Scan card");
   startScan();
+});
+
+// --- Backup & restore ---
+
+async function exportCards() {
+  const cards = loadCards();
+  if (!cards.length) {
+    alert("No cards to export yet.");
+    return;
+  }
+  const payload = JSON.stringify(
+    { app: "CardHolder", version: 1, exportedAt: new Date().toISOString(), cards },
+    null,
+    2
+  );
+  const filename = "cardholder-backup.json";
+
+  // Tier 1: native share sheet with a real file — on iOS this offers
+  // Save to Files (→ iCloud Drive), AirDrop, Mail, etc.; works in
+  // standalone PWAs where a plain download often doesn't
+  try {
+    const file = new File([payload], filename, { type: "application/json" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "CardHolder backup" });
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === "AbortError") return; // user dismissed the sheet
+    // otherwise fall through to the next method
+  }
+
+  // Tier 2: file download (desktop and most mobile browsers)
+  try {
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return;
+  } catch (e) {
+    // fall through
+  }
+
+  // Tier 3: clipboard — the universal floor
+  try {
+    await navigator.clipboard.writeText(payload);
+    alert("Cards copied to clipboard as JSON. Paste it somewhere safe to keep them.");
+  } catch (e) {
+    alert("Couldn't export automatically. Your data:\n\n" + payload);
+  }
+}
+
+function importCards(file) {
+  const reader = new FileReader();
+  reader.onerror = () => alert("Couldn't read that file.");
+  reader.onload = () => {
+    let data;
+    try {
+      data = JSON.parse(reader.result);
+    } catch (e) {
+      alert("That file isn't a valid CardHolder backup.");
+      return;
+    }
+    const incoming = Array.isArray(data) ? data : data && data.cards;
+    if (!Array.isArray(incoming)) {
+      alert("No cards found in that file.");
+      return;
+    }
+    const cards = loadCards();
+    const seen = new Set(cards.map((c) => c.code + "|" + c.format));
+    let added = 0;
+    incoming.forEach((c) => {
+      if (!c || !c.code) return;
+      const key = c.code + "|" + c.format;
+      if (seen.has(key)) return; // skip cards already present
+      seen.add(key);
+      cards.push({ ...c, id: c.id || makeId() });
+      added += 1;
+    });
+    saveCards(cards);
+    renderCardList();
+    alert(
+      added
+        ? "Imported " + added + " card" + (added === 1 ? "" : "s") + "."
+        : "Those cards are already here."
+    );
+  };
+  reader.readAsText(file);
+}
+
+const backupModal = document.getElementById("backup-modal");
+const backupFile = document.getElementById("backup-file");
+
+backupBtn.addEventListener("click", () => {
+  backupModal.hidden = false;
+});
+document.getElementById("backup-cancel").addEventListener("click", () => {
+  backupModal.hidden = true;
+});
+backupModal.addEventListener("click", (e) => {
+  if (e.target === backupModal) backupModal.hidden = true;
+});
+document.getElementById("backup-export").addEventListener("click", () => {
+  backupModal.hidden = true;
+  exportCards();
+});
+document.getElementById("backup-import").addEventListener("click", () => backupFile.click());
+backupFile.addEventListener("change", () => {
+  const f = backupFile.files[0];
+  backupFile.value = "";
+  if (!f) return;
+  backupModal.hidden = true;
+  importCards(f);
 });
 
 // The first-launch hint works like the + button

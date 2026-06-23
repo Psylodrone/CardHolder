@@ -67,6 +67,14 @@ header button {
   border-radius: 50%;
   line-height: 1;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+#backup-btn {
+  margin-right: 8px;
 }
 
 main {

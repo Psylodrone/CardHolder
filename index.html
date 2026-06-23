@@ -17,7 +17,12 @@
     <header>
       <button id="back-btn" hidden aria-label="Back">&larr;</button>
       <h1 id="header-title">CardHolder</h1>
-      <span id="app-version">v46</span>
+      <span id="app-version">v47</span>
+      <button id="backup-btn" aria-label="Backup and restore">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M4 13v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/>
+        </svg>
+      </button>
       <button id="add-btn" aria-label="Add card">+</button>
     </header>
 
@@ -107,6 +112,17 @@
         </div>
       </section>
     </main>
+
+    <!-- Backup & restore sheet -->
+    <div id="backup-modal" class="modal" hidden>
+      <div class="modal-sheet">
+        <h3 class="modal-title">Backup &amp; restore</h3>
+        <button type="button" id="backup-export" class="btn btn-primary">Export cards</button>
+        <button type="button" id="backup-import" class="btn btn-secondary">Import cards</button>
+        <input type="file" id="backup-file" accept="application/json,.json" hidden />
+        <button type="button" id="backup-cancel" class="btn">Cancel</button>
+      </div>
+    </div>
 
     <!-- Shared logo chooser sheet -->
     <div id="logo-modal" class="modal" hidden>
