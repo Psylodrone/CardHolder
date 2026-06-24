@@ -1,4 +1,4 @@
-const CACHE_NAME = "cardholder-v49";
+const CACHE_NAME = "cardholder-v50";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,6 +8,8 @@ const APP_SHELL = [
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
+  "./icons/apple-touch-icon.png",
+  "./icons/favicon-32.png",
   "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
   "https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js",
   "https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js",

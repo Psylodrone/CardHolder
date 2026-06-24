@@ -366,7 +366,7 @@ async function diagnoseLogo(card) {
   }
 
   const head = [
-    "CardHolder logo debug — " +
+    "Kardo logo debug — " +
       (document.getElementById("app-version") || {}).textContent,
     "online: " + navigator.onLine +
       "  |  serviceWorker: " +
@@ -1358,11 +1358,11 @@ async function exportCards() {
     return;
   }
   const payload = JSON.stringify(
-    { app: "CardHolder", version: 1, exportedAt: new Date().toISOString(), cards },
+    { app: "Kardo", version: 1, exportedAt: new Date().toISOString(), cards },
     null,
     2
   );
-  const filename = "cardholder-backup.json";
+  const filename = "kardo-backup.json";
 
   // Tier 1: native share sheet with a real file — on iOS this offers
   // Save to Files (→ iCloud Drive), AirDrop, Mail, etc.; works in
@@ -1370,7 +1370,7 @@ async function exportCards() {
   try {
     const file = new File([payload], filename, { type: "application/json" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: "CardHolder backup" });
+      await navigator.share({ files: [file], title: "Kardo backup" });
       return;
     }
   } catch (e) {
@@ -1411,7 +1411,7 @@ function importCards(file) {
     try {
       data = JSON.parse(reader.result);
     } catch (e) {
-      alert("That file isn't a valid CardHolder backup.");
+      alert("That file isn't a valid Kardo backup.");
       return;
     }
     const incoming = Array.isArray(data) ? data : data && data.cards;
@@ -1501,14 +1501,14 @@ document.getElementById("app-version").addEventListener("click", () => {
 });
 
 backBtn.addEventListener("click", () => {
-  showView("view-home", "CardHolder");
+  showView("view-home", "Kardo");
   renderCardList();
 });
 
 document.getElementById("rescan-btn").addEventListener("click", startScan);
 
 document.getElementById("add-cancel-btn").addEventListener("click", () => {
-  showView("view-home", "CardHolder");
+  showView("view-home", "Kardo");
   renderCardList();
 });
 
@@ -1532,7 +1532,7 @@ document.getElementById("save-card-btn").addEventListener("click", () => {
   cards.push({ id: makeId(), name, code, format, domain, logo });
   saveCards(cards);
 
-  showView("view-home", "CardHolder");
+  showView("view-home", "Kardo");
   renderCardList();
 });
 
@@ -1545,7 +1545,7 @@ document.getElementById("delete-card-btn").addEventListener("click", () => {
   saveCards(cards);
   selectedCardId = null;
 
-  showView("view-home", "CardHolder");
+  showView("view-home", "Kardo");
   renderCardList();
 });
 
@@ -1625,7 +1625,7 @@ document.getElementById("edit-card-btn").addEventListener("click", () => {
 // Discard changes and return to the card (fields repopulate on next open)
 document.getElementById("edit-cancel-btn").addEventListener("click", () => {
   if (selectedCardId) openDetail(selectedCardId);
-  else showView("view-home", "CardHolder");
+  else showView("view-home", "Kardo");
 });
 
 document.getElementById("edit-save-btn").addEventListener("click", () => {
@@ -1652,7 +1652,7 @@ document.getElementById("edit-save-btn").addEventListener("click", () => {
   card.format = editFormatSwiper.get();
   saveCards(cards);
 
-  showView("view-home", "CardHolder");
+  showView("view-home", "Kardo");
   renderCardList();
 });
 

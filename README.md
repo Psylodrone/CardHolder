@@ -1,4 +1,4 @@
-# CardHolder
+# Kardo
 
 A simple Progressive Web App (PWA) for storing loyalty/rewards cards on your phone — scan a barcode or QR code once, then pull it back up at checkout.
 
