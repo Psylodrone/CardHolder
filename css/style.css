@@ -1,8 +1,10 @@
 :root {
-  --primary: #0f9d58;
+  --primary: #F2730D; /* accent: primary buttons, links, plus icon */
+  --header: #3A3F47; /* top bar */
   --bg: #f5f5f7;
   --card-bg: #ffffff;
-  --surface-2: #f2f2f7; /* secondary fills: logo box, dropdown hover */
+  --surface-2: #f2f2f7; /* secondary fills: dropdown hover, empty logo box */
+  --logo-surface: #e9e9ee; /* light grey behind logos */
   --border: #d1d1d6;
   --input-bg: #ffffff;
   --btn-secondary-bg: #e5e5ea;
@@ -26,12 +28,6 @@
     --muted: #98989f;
   }
 
-  /* Logos and barcodes must stay on light backgrounds to remain visible
-     (light-on-transparent logos / black barcode bars would disappear) */
-  .card-thumb,
-  .logo-box.has-image {
-    background: #ffffff;
-  }
 }
 
 * {
@@ -67,7 +63,7 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: env(safe-area-inset-top, 16px) 16px 12px;
-  background: var(--primary);
+  background: var(--header);
   color: #fff;
 }
 
@@ -147,6 +143,7 @@ main {
   align-items: center;
   justify-content: center;
   padding: 10px;
+  background: var(--logo-surface);
 }
 
 .card-logo {
@@ -263,6 +260,10 @@ main {
 .logo-box.is-empty {
   border: 2px dashed var(--dash);
   color: var(--muted);
+}
+
+.logo-box.has-image {
+  background: var(--logo-surface);
 }
 
 .logo-box img {
