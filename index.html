@@ -17,9 +17,13 @@
 <body>
   <div id="app">
     <header>
-      <button id="back-btn" hidden aria-label="Back">&larr;</button>
+      <button id="back-btn" hidden aria-label="Back">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+        </svg>
+      </button>
       <h1 id="header-title">Kardo</h1>
-      <span id="app-version">v50</span>
+      <span id="app-version">v51</span>
       <button id="backup-btn" aria-label="Backup and restore">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M4 13v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/>
@@ -41,8 +45,8 @@
       <!-- Scan view: camera scanner -->
       <section id="view-scan" class="view">
         <button id="photo-btn" class="btn btn-secondary">Scan from photo</button>
-        <input type="file" id="photo-input" accept="image/*" capture="environment" hidden />
         <button id="manual-btn" class="btn btn-secondary">Enter code manually</button>
+        <input type="file" id="photo-input" accept="image/*" capture="environment" hidden />
         <div id="reader" style="margin-top: 12px;"></div>
         <div id="scan-result" class="scan-result" hidden>
           <div class="field" style="position: relative;">

@@ -61,7 +61,7 @@ html, body {
 header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   padding: env(safe-area-inset-top, 16px) 16px 12px;
   background: var(--header);
   color: #fff;
@@ -81,7 +81,7 @@ header h1 {
 }
 
 header button {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--primary);
   border: none;
   color: #fff;
   font-size: 24px;
@@ -96,8 +96,9 @@ header button {
   flex-shrink: 0;
 }
 
+/* Export/backup stays a neutral grey — only back and + are accent-orange */
 #backup-btn {
-  margin-right: 8px;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 main {
