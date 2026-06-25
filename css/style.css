@@ -185,9 +185,11 @@ main {
   padding: 0 24px;
 }
 
-.empty-state .big-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
+.empty-state .empty-icon {
+  width: 192px;
+  height: 192px;
+  border-radius: 44px;
+  margin-bottom: 16px;
 }
 
 #reader {
