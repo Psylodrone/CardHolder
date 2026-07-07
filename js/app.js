@@ -772,15 +772,23 @@ function mapFormat(format) {
   return FORMAT_MAP[format] || "CODE128";
 }
 
+// Render a QR code into container using qrcodejs (global QRCode). It draws
+// a canvas (with an <img> fallback) into the element.
+function renderQr(container, text, size) {
+  container.innerHTML = "";
+  new QRCode(container, {
+    text: text,
+    width: size,
+    height: size,
+    correctLevel: QRCode.CorrectLevel.M,
+  });
+}
+
 function renderBarcode(container, code, format) {
   container.innerHTML = "";
 
   if (format === "QR_CODE") {
-    const canvas = document.createElement("canvas");
-    container.appendChild(canvas);
-    QRCode.toCanvas(canvas, code, { width: 220 }, (err) => {
-      if (err) console.error(err);
-    });
+    renderQr(container, code, 200);
     return;
   }
 
@@ -853,12 +861,7 @@ function renderPreviewBarcode(container, code, format) {
 
   if (format === "QR_CODE") {
     try {
-      container.innerHTML = "";
-      const canvas = document.createElement("canvas");
-      container.appendChild(canvas);
-      QRCode.toCanvas(canvas, code, { width: 140 }, (err) => {
-        if (err) showError();
-      });
+      renderQr(container, code, 130);
     } catch (e) {
       showError(); // e.g. the QR library failed to load
     }
