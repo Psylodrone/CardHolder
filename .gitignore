@@ -10,6 +10,7 @@ Thumbs.db
 # Editor
 .vscode/
 
-# Local Claude Code settings
+# Local Claude Code settings / working dirs
 .claude/settings.local.json
 .claude/launch.json
+.claude/worktrees/
