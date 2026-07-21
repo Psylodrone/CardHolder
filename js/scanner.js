@@ -1,7 +1,38 @@
 const Scanner = (() => {
   let html5QrCode = null;
 
+  // The camera (html5-qrcode) and photo-decode (ZXing) libraries are big
+  // (~650KB together) and only needed for scanning — NOT for viewing cards.
+  // Load them on demand so the app launches without waiting on them.
+  let libsPromise = null;
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("Failed to load " + src));
+      document.head.appendChild(s);
+    });
+  }
+  function ensureLibs() {
+    if (!libsPromise) {
+      libsPromise = Promise.all([
+        typeof Html5Qrcode !== "undefined"
+          ? null
+          : loadScript("https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"),
+        typeof ZXing !== "undefined"
+          ? null
+          : loadScript("https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"),
+      ]).catch((e) => {
+        libsPromise = null; // allow a retry next time
+        throw e;
+      });
+    }
+    return libsPromise;
+  }
+
   async function start(onSuccess) {
+    await ensureLibs();
     if (!html5QrCode) {
       html5QrCode = new Html5Qrcode("reader");
     }
@@ -80,6 +111,7 @@ const Scanner = (() => {
   // scanFile downscales the image to the viewfinder size, destroying
   // small barcodes — so we use the native detector or ZXing instead.
   async function scanFile(file) {
+    await ensureLibs();
     await stop();
 
     const url = URL.createObjectURL(file);
@@ -118,5 +150,5 @@ const Scanner = (() => {
     }
   }
 
-  return { start, stop, scanFile };
+  return { start, stop, scanFile, preload: ensureLibs };
 })();
